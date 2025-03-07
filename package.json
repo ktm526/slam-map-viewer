@@ -1,0 +1,46 @@
+{
+  "name": "slam_win",
+  "version": "1.0.2",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "react:build": "vite build",
+    "react:dev": "vite",
+    "dev": "vite build && npm run electron",
+    "electron": "electron .",
+    "build": "vite build && electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "install": "^0.13.0",
+    "npm": "^11.0.0",
+    "protobufjs": "^7.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.10"
+  },
+  "build": {
+    "appId": "com.yourapp.id",
+    "productName": "SLAM Map Viewer",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "assets/favicon.ico"
+    },
+    "mac": {
+      "icon": "assets/app-icon.png"
+    },
+    "linux": {
+      "icon": "assets/app-icon.png"
+    }
+  }
+}

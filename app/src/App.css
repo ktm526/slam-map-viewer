@@ -1,0 +1,34 @@
+/* 기본 스타일 초기화 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 필요할 때만 overflow 설정 */
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* 전체 스크롤 방지 */
+}
+
+/* 추가 전역 스타일 */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+  color: #333; /* 기본 글씨 색상 추가 */
+}
+
+
+/* Pretendard 폰트 선언 */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('/fonts/Pretendard-regular.ttf') format('truetype');
+  font-weight: 400; /* Regular weight */
+  font-style: normal;
+}
+
+/* 모든 요소에 Pretendard 적용 */
+* {
+  font-family: 'Pretendard', Arial, sans-serif; /* Pretendard 우선 */
+}
