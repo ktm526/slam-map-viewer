@@ -328,10 +328,14 @@ function App() {
       <div style={{ paddingTop: "90px", width: "100vw", height: "100vh" }}>
         <MapCanvas
           mapData={mapData}
-          onCanvasClick={() => {}}
           onObjectClick={handleObjectClick}
           activeMenu={activeMenu}
           amrPosition={amrPosition}
+          onMapDataUpdate={(updatedData) => {
+            setMapData(updatedData);
+            // 필요 시 main 프로세스로도 전송
+            window.electronAPI.sendMapDataToMain(updatedData);
+          }}
         />
         <InfoPanel
           visible={!!clickedObject}

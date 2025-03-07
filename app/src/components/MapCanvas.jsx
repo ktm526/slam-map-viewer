@@ -1,9 +1,15 @@
 import React, { useRef, useEffect, useState } from "react";
 
-const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
+const MapCanvas = ({
+  mapData,
+  onObjectClick,
+  onMapDataUpdate,
+  activeMenu,
+  amrPosition,
+}) => {
   const canvasRef = useRef(null);
 
-  // 확대/축소 비율 & 오프셋 (캔버스 내부 좌표)
+  // 확대/축소, 오프셋, 드래그 관련 상태
   const [scale, setScale] = useState(40);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -14,7 +20,11 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
   const [clickedObject, setClickedObject] = useState(null);
   const [tooltip, setTooltip] = useState(null);
 
-  // 맵 좌표 영역 (기본값)
+  // 커브 수정 관련 상태
+  const [editingCurve, setEditingCurve] = useState(null);
+  const [draggingHandle, setDraggingHandle] = useState(null);
+
+  // 맵 좌표 영역
   const minPos = useRef(
     mapData.header ? mapData.header.minPos : { x: 0, y: 0 }
   );
@@ -48,23 +58,26 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // 초기 mapData 로드 시 한 번만 (0,0)이 화면 중앙에 오도록 offset 설정
+  // 외부에서 mapData를 새로 받을 때만 원점(중심)을 재설정하도록 처리
+  const prevVersion = useRef(null);
   useEffect(() => {
     if (mapData && mapData.header && canvasSize.width && canvasSize.height) {
-      const mapHeight = maxPos.current.y - minPos.current.y;
-
-      setOffset({
-        x: canvasSize.width / 2 + minPos.current.x * scale,
-        y:
-          canvasSize.height / 2 -
-          (1 + minPos.current.y / mapHeight) * (mapHeight * scale),
-      });
+      // 외부에서 mapData가 새로 바뀌었을 때 (예: header.version이 달라졌을 때)
+      if (prevVersion.current !== mapData.header.version) {
+        const mapHeight = maxPos.current.y - minPos.current.y;
+        setOffset({
+          x: canvasSize.width / 2 + minPos.current.x * scale,
+          y:
+            canvasSize.height / 2 -
+            (1 + minPos.current.y / mapHeight) * (mapHeight * scale),
+        });
+        prevVersion.current = mapData.header.version;
+      }
     }
-  }, [mapData]);
+  }, [mapData, canvasSize, scale]);
 
-  // 좌표 변환 함수 (세로 반전 적용, 캔버스 내부 좌표)
+  // 좌표 변환 함수 (맵 좌표 -> 화면 좌표)
   const transformCoordinates = (mapX, mapY) => {
-    const { width, height } = canvasSize;
     const mapWidth = maxPos.current.x - minPos.current.x;
     const mapHeight = maxPos.current.y - minPos.current.y;
     const screenX = (mapX - minPos.current.x) * scale + offset.x;
@@ -74,7 +87,18 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     return { x: screenX, y: screenY };
   };
 
-  // canvas 내 좌표를 클라이언트 좌표로 변환
+  // 좌표 변환 (화면 좌표 -> 맵 좌표)
+  const inverseTransformCoordinates = (screenX, screenY) => {
+    const mapWidth = maxPos.current.x - minPos.current.x;
+    const mapHeight = maxPos.current.y - minPos.current.y;
+    const mapX = (screenX - offset.x) / scale + minPos.current.x;
+    const mapY =
+      minPos.current.y +
+      (1 - (screenY - offset.y) / (mapHeight * scale)) * mapHeight;
+    return { x: mapX, y: mapY };
+  };
+
+  // 캔버스 내 좌표를 클라이언트 좌표로 변환
   const getClientCoordinates = (canvasCoords) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -100,8 +124,8 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     let found = null;
     (mapData.advancedPointList || []).forEach((station) => {
       const screenPos = transformCoordinates(station.pos.x, station.pos.y);
-      const dist = Math.hypot(mouseX - screenPos.x, mouseY - screenPos.y);
-      if (dist < 15) found = { type: "advancedPoint", data: station };
+      if (Math.hypot(mouseX - screenPos.x, mouseY - screenPos.y) < 15)
+        found = { type: "advancedPoint", data: station };
     });
     if (!found) {
       const canvas = canvasRef.current;
@@ -130,15 +154,15 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
         ctx.lineWidth = 10;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        const hit = ctx.isPointInStroke(path, mouseX, mouseY);
+        if (ctx.isPointInStroke(path, mouseX, mouseY))
+          found = { type: "advancedCurve", data: curve };
         ctx.restore();
-        if (hit) found = { type: "advancedCurve", data: curve };
       });
     }
     return found;
   };
 
-  // 왼쪽 클릭 핸들러: 빈 공간 클릭 시 InfoPanel 제거
+  // 왼쪽 클릭: 빈 공간 클릭 시 InfoPanel 제거
   const handleCanvasClick = (e) => {
     e.preventDefault();
     if (tooltip) {
@@ -159,16 +183,16 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     if (onObjectClick) onObjectClick(clicked);
   };
 
-  // 우클릭 핸들러: 우클릭한 오브젝트 기준으로 tooltip 위치 설정 (클라이언트 좌표 기준)
+  // 우클릭: tooltip 표시 (수정/삭제 메뉴)
   const handleContextMenu = (e) => {
     e.preventDefault();
     const pos = getCanvasMousePos(e);
     const obj = checkClickedObject(pos.x, pos.y);
     if (obj) {
       let refPoint = null;
-      if (obj.type === "advancedPoint") {
+      if (obj.type === "advancedPoint")
         refPoint = transformCoordinates(obj.data.pos.x, obj.data.pos.y);
-      } else if (obj.type === "advancedCurve") {
+      else if (obj.type === "advancedCurve") {
         const start = transformCoordinates(
           obj.data.startPos.pos.x,
           obj.data.startPos.pos.y
@@ -187,42 +211,85 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
         );
         const t = 0.5,
           mt = 1 - t;
-        const midX =
-          mt ** 3 * start.x +
-          3 * mt ** 2 * t * c1.x +
-          3 * mt * t ** 2 * c2.x +
-          t ** 3 * end.x;
-        const midY =
-          mt ** 3 * start.y +
-          3 * mt ** 2 * t * c1.y +
-          3 * mt * t ** 2 * c2.y +
-          t ** 3 * end.y;
-        refPoint = { x: midX, y: midY };
+        refPoint = {
+          x:
+            mt ** 3 * start.x +
+            3 * mt ** 2 * t * c1.x +
+            3 * mt * t ** 2 * c2.x +
+            t ** 3 * end.x,
+          y:
+            mt ** 3 * start.y +
+            3 * mt ** 2 * t * c1.y +
+            3 * mt * t ** 2 * c2.y +
+            t ** 3 * end.y,
+        };
       }
-      // canvas 내부 좌표 refPoint를 클라이언트 좌표로 변환
       const clientPos = getClientCoordinates(refPoint);
-      // tooltip을 클라이언트 좌표 기준으로 아주 근접하게 (+2px)
       setTooltip({ x: clientPos.x + 2, y: clientPos.y + 2, object: obj });
     }
   };
 
-  // 드래그 처리
+  // 편집 모드에서 제어 핸들 드래그 처리
   const handleMouseDown = (e) => {
-    setIsDragging(true);
     const pos = getCanvasMousePos(e);
+    if (editingCurve) {
+      const handleRadius = 5;
+      const h1 = transformCoordinates(
+        editingCurve.controlPos1.x,
+        editingCurve.controlPos1.y
+      );
+      const h2 = transformCoordinates(
+        editingCurve.controlPos2.x,
+        editingCurve.controlPos2.y
+      );
+      if (Math.hypot(pos.x - h1.x, pos.y - h1.y) < handleRadius) {
+        setDraggingHandle("control1");
+        setLastMousePos(pos);
+        return;
+      }
+      if (Math.hypot(pos.x - h2.x, pos.y - h2.y) < handleRadius) {
+        setDraggingHandle("control2");
+        setLastMousePos(pos);
+        return;
+      }
+    }
+    setIsDragging(true);
     setLastMousePos(pos);
   };
 
   const handleMouseMove = (e) => {
     const pos = getCanvasMousePos(e);
-    const dx = pos.x - lastMousePos.x;
-    const dy = pos.y - lastMousePos.y;
+    // 편집 모드: 제어 핸들 드래그 시
+    if (draggingHandle && editingCurve) {
+      const sensitivity = 1.0; // 감도를 낮춤
+      const deltaScreen = {
+        x: pos.x - lastMousePos.x,
+        y: pos.y - lastMousePos.y,
+      };
+      // x축는 그대로, y축은 반전(화면과 맵 좌표의 y축 반전 관계 때문에)
+      const deltaMap = {
+        x: (deltaScreen.x / scale) * sensitivity,
+        y: (deltaScreen.y / scale) * sensitivity,
+      };
+      if (draggingHandle === "control1") {
+        editingCurve.controlPos1.x += deltaMap.x;
+        editingCurve.controlPos1.y -= deltaMap.y;
+      } else if (draggingHandle === "control2") {
+        editingCurve.controlPos2.x += deltaMap.x;
+        editingCurve.controlPos2.y -= deltaMap.y;
+      }
+      setEditingCurve({ ...editingCurve });
+      setLastMousePos(pos);
+      return;
+    }
+
+    // Hover 체크
     setHoveredObject(() => {
       let hovered = null;
       (mapData.advancedPointList || []).forEach((station) => {
         const screenPos = transformCoordinates(station.pos.x, station.pos.y);
-        const dist = Math.hypot(pos.x - screenPos.x, pos.y - screenPos.y);
-        if (dist < 15) hovered = { type: "advancedPoint", data: station };
+        if (Math.hypot(pos.x - screenPos.x, pos.y - screenPos.y) < 15)
+          hovered = { type: "advancedPoint", data: station };
       });
       if (!hovered) {
         const canvas = canvasRef.current;
@@ -251,14 +318,17 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
           ctx.lineWidth = 10;
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
-          const hit = ctx.isPointInStroke(path, pos.x, pos.y);
+          if (ctx.isPointInStroke(path, pos.x, pos.y))
+            hovered = { type: "advancedCurve", data: curve };
           ctx.restore();
-          if (hit) hovered = { type: "advancedCurve", data: curve };
         });
       }
       return hovered;
     });
+
     if (isDragging) {
+      const dx = pos.x - lastMousePos.x;
+      const dy = pos.y - lastMousePos.y;
       setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
       setLastMousePos(pos);
     }
@@ -266,6 +336,45 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    setDraggingHandle(null);
+    // 편집 완료 시, 외부 업데이트 콜백으로 mapData도 업데이트 (advancedCurveList 내 해당 곡선 수정)
+    if (editingCurve && onMapDataUpdate) {
+      const updatedMapData = {
+        ...mapData,
+        advancedCurveList: mapData.advancedCurveList.map((curve) =>
+          curve.instanceName === editingCurve.instanceName
+            ? editingCurve
+            : curve
+        ),
+      };
+      onMapDataUpdate(updatedMapData);
+    }
+    setEditingCurve(null);
+  };
+
+  // 마우스 휠 줌
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const { width, height } = canvasSize;
+    const { x: mouseX, y: mouseY } = getCanvasMousePos(e);
+    const zoomFactor = 1.1;
+    const ratioX = (mouseX - offset.x) / (width * scale);
+    const ratioY = (mouseY - offset.y) / (height * scale);
+    const realMapX =
+      ratioX * (maxPos.current.x - minPos.current.x) + minPos.current.x;
+    const realMapY =
+      ratioY * (maxPos.current.y - minPos.current.y) + minPos.current.y;
+    let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
+    newScale = Math.max(0.05, Math.min(newScale, 100));
+    setScale(newScale);
+    const newRatioX =
+      (realMapX - minPos.current.x) / (maxPos.current.x - minPos.current.x);
+    const newRatioY =
+      (realMapY - minPos.current.y) / (maxPos.current.y - minPos.current.y);
+    setOffset({
+      x: mouseX - newRatioX * (width * newScale),
+      y: mouseY - newRatioY * (height * newScale),
+    });
   };
 
   // 그리기 로직
@@ -275,14 +384,14 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     const { width, height } = canvasSize;
     ctx.clearRect(0, 0, width, height);
 
-    // normalPosList: 검정 점들
+    // normalPosList: 검은 점들
     ctx.fillStyle = "black";
     (mapData.normalPosList || []).forEach((pos) => {
       const { x, y } = transformCoordinates(pos.x, pos.y);
       ctx.fillRect(x - 1, y - 1, 2, 2);
     });
 
-    // advancedLineList: 분홍 선 (transformCoordinates 사용)
+    // advancedLineList: 분홍 선들
     ctx.strokeStyle = "pink";
     ctx.lineWidth = 1;
     (mapData.advancedLineList || []).forEach((lineData) => {
@@ -300,71 +409,70 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
       ctx.stroke();
     });
 
-    // advancedCurveList: 빨간 베지어 곡선 및 방향 표시
-    ctx.strokeStyle = "red";
+    // advancedCurveList: 베지어 곡선 그리기
     ctx.lineWidth = 2;
     (mapData.advancedCurveList || []).forEach((curveData) => {
+      const currentCurve =
+        editingCurve && editingCurve.instanceName === curveData.instanceName
+          ? editingCurve
+          : curveData;
       const start = transformCoordinates(
-        curveData.startPos.pos.x,
-        curveData.startPos.pos.y
+        currentCurve.startPos.pos.x,
+        currentCurve.startPos.pos.y
       );
       const c1 = transformCoordinates(
-        curveData.controlPos1.x,
-        curveData.controlPos1.y
+        currentCurve.controlPos1.x,
+        currentCurve.controlPos1.y
       );
       const c2 = transformCoordinates(
-        curveData.controlPos2.x,
-        curveData.controlPos2.y
+        currentCurve.controlPos2.x,
+        currentCurve.controlPos2.y
       );
       const end = transformCoordinates(
-        curveData.endPos.pos.x,
-        curveData.endPos.pos.y
+        currentCurve.endPos.pos.x,
+        currentCurve.endPos.pos.y
       );
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
+      ctx.strokeStyle = "red";
       ctx.stroke();
 
-      // 방향 표시용 삼각형 (t = 0.5)
-      const t = 0.5,
-        mt = 1 - t;
-      const S0 = start,
-        S1 = c1,
-        S2 = c2,
-        S3 = end;
-      const midX =
-        mt ** 3 * S0.x +
-        3 * mt ** 2 * t * S1.x +
-        3 * mt * t ** 2 * S2.x +
-        t ** 3 * S3.x;
-      const midY =
-        mt ** 3 * S0.y +
-        3 * mt ** 2 * t * S1.y +
-        3 * mt * t ** 2 * S2.y +
-        t ** 3 * S3.y;
-      const dx =
-        3 * mt ** 2 * (S1.x - S0.x) +
-        6 * mt * t * (S2.x - S1.x) +
-        3 * t ** 2 * (S3.x - S2.x);
-      const dy =
-        3 * mt ** 2 * (S1.y - S0.y) +
-        6 * mt * t * (S2.y - S1.y) +
-        3 * t ** 2 * (S3.y - S2.y);
-      const angle = Math.atan2(dy, dx);
-      ctx.save();
-      ctx.translate(midX, midY);
-      ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.moveTo(0, -6);
-      ctx.lineTo(-4, 6);
-      ctx.lineTo(4, 6);
-      ctx.closePath();
-      ctx.fillStyle = "red";
-      ctx.fill();
-      ctx.restore();
+      // 편집 중인 곡선이면, 시작→control1과 end→control2만 연결하는 선 및 핸들 표시
+      if (
+        editingCurve &&
+        editingCurve.instanceName === curveData.instanceName
+      ) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,255,0.5)";
+        // 시작점과 controlPos1 연결
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(c1.x, c1.y);
+        ctx.stroke();
+        // endPos와 controlPos2 연결
+        ctx.beginPath();
+        ctx.moveTo(end.x, end.y);
+        ctx.lineTo(c2.x, c2.y);
+        ctx.stroke();
+
+        const handleRadius = 5;
+        // controlPos1 핸들
+        ctx.beginPath();
+        ctx.arc(c1.x, c1.y, handleRadius, 0, Math.PI * 2);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+        ctx.stroke();
+        // controlPos2 핸들
+        ctx.beginPath();
+        ctx.arc(c2.x, c2.y, handleRadius, 0, Math.PI * 2);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+        ctx.stroke();
+      }
     });
 
-    // advancedPointList: 스테이션 그리기
+    // advancedPointList: 오렌지 사각형 및 점
     (mapData.advancedPointList || []).forEach((station) => {
       const { x, y } = transformCoordinates(station.pos.x, station.pos.y);
       const dir = station.dir;
@@ -399,7 +507,7 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
       ctx.fillText(station.instanceName, x, y + 100);
     });
 
-    // 원점 (0,0) 표시: 녹색 십자와 "(0, 0)" 텍스트
+    // 원점 (0,0) 표시
     const originScreen = transformCoordinates(0, 0);
     ctx.save();
     ctx.strokeStyle = "green";
@@ -419,7 +527,6 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     // Hover 및 클릭된 오브젝트 강조
     const highlightObject = (object) => {
       if (!object) return;
-      const ctx = canvas.getContext("2d");
       if (object.type === "advancedPoint") {
         const { x, y } = transformCoordinates(
           object.data.pos.x,
@@ -496,32 +603,8 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
     hoveredObject,
     clickedObject,
     amrPosition,
+    editingCurve,
   ]);
-
-  // 마우스 휠 줌 (기존 로직 유지)
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const { width, height } = canvasSize;
-    const { x: mouseX, y: mouseY } = getCanvasMousePos(e);
-    const zoomFactor = 1.1;
-    const ratioX = (mouseX - offset.x) / (width * scale);
-    const ratioY = (mouseY - offset.y) / (height * scale);
-    const realMapX =
-      ratioX * (maxPos.current.x - minPos.current.x) + minPos.current.x;
-    const realMapY =
-      ratioY * (maxPos.current.y - minPos.current.y) + minPos.current.y;
-    let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
-    newScale = Math.max(0.05, Math.min(newScale, 100));
-    setScale(newScale);
-    const newRatioX =
-      (realMapX - minPos.current.x) / (maxPos.current.x - minPos.current.x);
-    const newRatioY =
-      (realMapY - minPos.current.y) / (maxPos.current.y - minPos.current.y);
-    setOffset({
-      x: mouseX - newRatioX * (width * newScale),
-      y: mouseY - newRatioY * (height * newScale),
-    });
-  };
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -550,8 +633,17 @@ const MapCanvas = ({ mapData, onObjectClick, activeMenu, amrPosition }) => {
           }}
           onClick={() => setTooltip(null)}
         >
-          <div>옵션 메뉴</div>
-          <div style={{ cursor: "pointer" }}>수정</div>
+          <div
+            style={{ cursor: "pointer" }}
+            onClick={() => {
+              if (tooltip.object && tooltip.object.type === "advancedCurve") {
+                setEditingCurve(tooltip.object.data);
+              }
+              setTooltip(null);
+            }}
+          >
+            수정
+          </div>
           <div style={{ cursor: "pointer" }}>삭제</div>
         </div>
       )}
