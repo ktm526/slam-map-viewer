@@ -2,11 +2,19 @@ import React, { useState, useEffect } from "react";
 import "./SettingsModal.css";
 
 const SettingsModal = ({ isOpen, onClose, onSave }) => {
+  // 기존 설정 관련 state
   const [amrIp, setAmrIp] = useState("");
   const [previewImage, setPreviewImage] = useState(null);
   const [uploadedImage, setUploadedImage] = useState(null);
   const [amrWidth, setAmrWidth] = useState("");
   const [amrHeight, setAmrHeight] = useState("");
+
+  // 재배치(Relocate) 관련 state
+  // relocateMode: "auto" (자동) 또는 "manual" (수동)
+  const [relocateMode, setRelocateMode] = useState("auto");
+  const [relocateX, setRelocateX] = useState("");
+  const [relocateY, setRelocateY] = useState("");
+  const [relocateAngle, setRelocateAngle] = useState("");
 
   useEffect(() => {
     // 저장된 AMR IP 불러오기
@@ -27,6 +35,15 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
     if (savedHeight) setAmrHeight(savedHeight);
   }, []);
 
+  // relocateMode가 auto이면 입력값 초기화
+  useEffect(() => {
+    if (relocateMode === "auto") {
+      setRelocateX("");
+      setRelocateY("");
+      setRelocateAngle("");
+    }
+  }, [relocateMode]);
+
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -41,7 +58,7 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
   };
 
   const handleSave = async () => {
-    // 저장된 값들을 localStorage에 보관
+    // 기존 설정값 저장
     localStorage.setItem("amrIp", amrIp);
     if (uploadedImage) {
       localStorage.setItem("amrImage", uploadedImage);
@@ -51,11 +68,25 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
 
     // 메인 프로세스로 AMR IP 전달
     await window.electronAPI.setAmrIp(amrIp);
-    // 부모 컴포넌트로 업데이트된 값 전달 (필요시)
     if (onSave) {
       onSave({ amrIp, amrImage: uploadedImage, amrWidth, amrHeight });
     }
     onClose();
+  };
+
+  const handleRelocateToggle = (e) => {
+    // 체크되면 수동, 아니면 자동
+    setRelocateMode(e.target.checked ? "manual" : "auto");
+  };
+
+  const handleRelocate = () => {
+    if (relocateMode === "manual") {
+      console.log("수동 재배치:", relocateX, relocateY, relocateAngle);
+      window.electronAPI.relocateAMR(relocateX, relocateY, relocateAngle);
+    } else {
+      console.log("자동 재배치");
+      window.electronAPI.relocateAMRAuto();
+    }
   };
 
   if (!isOpen) return null;
@@ -107,6 +138,51 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
               </div>
             </div>
           </div>
+        </div>
+        {/* 재배치 영역 */}
+        <div className="relocate-section">
+          <div className="relocate-header">
+            <h3>AMR 재배치</h3>
+            <div className="relocate-toggle">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={relocateMode === "manual"}
+                  onChange={handleRelocateToggle}
+                />
+                <span className="slider"></span>
+              </label>
+              <span className="mode-label">
+                {relocateMode === "manual" ? "수동" : "자동"}
+              </span>
+            </div>
+          </div>
+          <div className="relocate-inputs">
+            <input
+              type="number"
+              placeholder="X 좌표"
+              value={relocateX}
+              onChange={(e) => setRelocateX(e.target.value)}
+              disabled={relocateMode === "auto"}
+            />
+            <input
+              type="number"
+              placeholder="Y 좌표"
+              value={relocateY}
+              onChange={(e) => setRelocateY(e.target.value)}
+              disabled={relocateMode === "auto"}
+            />
+            <input
+              type="number"
+              placeholder="Angle (rad)"
+              value={relocateAngle}
+              onChange={(e) => setRelocateAngle(e.target.value)}
+              disabled={relocateMode === "auto"}
+            />
+          </div>
+          <button className="relocate-button" onClick={handleRelocate}>
+            재배치
+          </button>
         </div>
         <div className="modal-divider"></div>
         <div className="modal-actions">

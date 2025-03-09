@@ -52,15 +52,22 @@ const expectedPathProps = [
 ];
 
 const InfoPanel = ({ visible, objectData, activeMenu, onUpdate, onDelete }) => {
-  const [localData, setLocalData] = useState(objectData?.data || {});
+  // objectData가 { type, data } 구조이면 data를 평면화하여 localData로 사용
+  const [localData, setLocalData] = useState({});
 
   useEffect(() => {
-    if (objectData?.data) {
-      setLocalData(objectData.data);
+    if (objectData) {
+      if (objectData.data) {
+        // objectData 내부에 data가 있다면 평면화
+        setLocalData({ ...objectData.data, type: objectData.type });
+      } else {
+        setLocalData(objectData);
+      }
     }
   }, [objectData]);
 
-  if (!visible || !localData) return null;
+  // localData에 최소한 instanceName이 있어야 표시하도록 함
+  if (!visible || !localData || !localData.instanceName) return null;
 
   const handleInputChange = (key, value) => {
     setLocalData((prev) => ({
@@ -69,7 +76,7 @@ const InfoPanel = ({ visible, objectData, activeMenu, onUpdate, onDelete }) => {
     }));
   };
 
-  // type에 따라 값을 업데이트하고, 속성이 없으면 새로 추가합니다.
+  // property 값을 업데이트 (기존 속성이 있으면 수정, 없으면 새로 추가)
   const handlePropertyChange = (key, value, type = "double") => {
     setLocalData((prev) => {
       let newProperties = [];
@@ -124,9 +131,9 @@ const InfoPanel = ({ visible, objectData, activeMenu, onUpdate, onDelete }) => {
   };
 
   const handleSave = () => {
-    console.log("Saving object:", { ...objectData, data: localData });
+    console.log("Saving object:", localData);
     if (onUpdate) {
-      onUpdate({ ...objectData, data: localData });
+      onUpdate(localData);
     }
   };
 
@@ -237,9 +244,9 @@ const InfoPanel = ({ visible, objectData, activeMenu, onUpdate, onDelete }) => {
   );
 
   let content;
-  if (objectData.type === "advancedPoint") {
+  if (localData.type === "advancedPoint") {
     content = renderStationForm(localData);
-  } else if (objectData.type === "advancedCurve") {
+  } else if (localData.type === "advancedCurve") {
     content = renderPathForm(localData);
   } else {
     content = <div className="info-panel-content">Unknown object type</div>;
@@ -249,7 +256,7 @@ const InfoPanel = ({ visible, objectData, activeMenu, onUpdate, onDelete }) => {
     <div className="info-panel-container">
       <div className="info-panel-header">
         <span className="info-panel-title">
-          {objectData.type === "advancedPoint" ? "Station 정보" : "Path 정보"}{" "}
+          {localData.type === "advancedPoint" ? "Station 정보" : "Path 정보"}{" "}
           {activeMenu === 1 ? "(SLAM 진행 중)" : ""}
         </span>
       </div>

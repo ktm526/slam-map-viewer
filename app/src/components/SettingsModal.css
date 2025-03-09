@@ -9,14 +9,13 @@
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  /* 기본 폰트로 롤백 (특별한 font-family 없음) */
 }
 
 .settings-modal-content {
   background: #fff;
   padding: 30px;
   border-radius: 12px;
-  width: 500px;
+  width: 600px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -42,7 +41,6 @@
   display: block;
   margin-bottom: 5px;
   font-weight: bold;
-  /* ":" 문자는 JSX에서 제거 */
 }
 
 .settings-row input {
@@ -59,7 +57,6 @@
   border-color: #e7e964;
 }
 
-/* 파일 입력창도 텍스트 입력창과 유사하게 스타일 적용 */
 .upload-container input[type="file"] {
   width: 100%;
   padding: 10px 12px;
@@ -80,6 +77,7 @@
   margin-bottom: 20px;
 }
 
+/* 미리보기 영역 */
 .preview-container {
   flex: 1;
   border: 1px solid #eee;
@@ -101,6 +99,7 @@
   border-radius: 8px;
 }
 
+/* 업로드 영역 */
 .upload-container {
   flex: 1;
   display: flex;
@@ -112,7 +111,6 @@
   font-size: 14px;
   font-weight: bold;
   color: #333;
-  /* ":" 문자는 JSX에서 제거 */
 }
 
 .size-inputs {
@@ -129,7 +127,6 @@
   margin-bottom: 5px;
   font-size: 14px;
   font-weight: bold;
-  /* ":" 문자는 JSX에서 제거 */
 }
 
 .size-inputs input {
@@ -146,7 +143,136 @@
   border-color: #e7e964;
 }
 
-/* 가로 디바이더 추가 */
+/* 재배치 영역 */
+.relocate-section {
+  margin-bottom: 20px;
+  border-top: 1px solid #ddd;
+  padding-top: 15px;
+}
+
+/* 재배치 헤더: 'AMR 재배치'와 토글을 한 줄에 배치 */
+.relocate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.relocate-header h3 {
+  font-size: 16px;
+  font-weight: bold;
+  text-align: left;
+  margin: 0;
+}
+
+/* 토글 영역: 토글과 모드 레이블을 수직 가운데 정렬 */
+.relocate-toggle {
+  display: flex;
+  align-items: center;
+}
+
+/* 토글 스위치 스타일: 크기를 축소하고, 비활성 시 순수 회색, 활성 시 #E7E964 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 24px;
+  height: 14px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #808080;
+  transition: 0.4s;
+  border-radius: 14px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 10px;
+  width: 10px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #e7e964;
+}
+
+input:checked + .slider:before {
+  transform: translateX(10px);
+}
+
+/* 토글 옆 모드 레이블 */
+.mode-label {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #aaa;
+}
+
+/* 재배치 입력창 한 줄 */
+.relocate-inputs {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.relocate-inputs input {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  transition: border 0.2s;
+}
+
+.relocate-inputs input:focus {
+  outline: none;
+  border-color: #e7e964;
+}
+
+/* 비활성화 입력창은 더 어둡게 */
+.relocate-inputs input:disabled {
+  background-color: #f0f0f0;
+  border-color: #bbb;
+  color: #777;
+}
+
+/* 재배치 버튼: 테두리 1px, 기본 상태는 테두리와 글씨만 #E7E964, 호버 시 배경 채움 */
+.relocate-button {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #e7e964;
+  background-color: transparent;
+  border: 1px solid #e7e964;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.relocate-button:hover {
+  background-color: #e7e964;
+  color: #000;
+}
+
+/* 가로 디바이더 */
 .modal-divider {
   border-top: 1px solid #ddd;
   margin-bottom: 15px;
@@ -154,7 +280,7 @@
 
 .modal-actions {
   display: flex;
-  justify-content: center; /* 가운데 정렬 */
+  justify-content: center;
   gap: 15px;
 }
 
@@ -165,7 +291,7 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  background: none; /* 기본 배경 없음 */
+  background: none;
   color: #2e2e2e;
   transition: background 0.2s, color 0.2s;
 }

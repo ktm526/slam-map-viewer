@@ -6,6 +6,7 @@ const MapCanvas = ({
   onMapDataUpdate,
   activeMenu,
   amrPosition,
+  onAddStation,
 }) => {
   const canvasRef = useRef(null);
 
@@ -23,6 +24,9 @@ const MapCanvas = ({
   // 커브 수정 관련 상태
   const [editingCurve, setEditingCurve] = useState(null);
   const [draggingHandle, setDraggingHandle] = useState(null);
+
+  //스테이션 추가 관련 상태
+  const [stationAddInfo, setStationAddInfo] = useState(null);
 
   // 맵 좌표 영역 (map unit 1 = 1m로 가정)
   const minPos = useRef(
@@ -165,23 +169,31 @@ const MapCanvas = ({
   // 왼쪽 클릭: 빈 공간 클릭 시 InfoPanel 제거
   const handleCanvasClick = (e) => {
     e.preventDefault();
-    if (tooltip) {
-      setTooltip(null);
-      if (onObjectClick) onObjectClick(null);
-      setClickedObject(null);
-      return;
-    }
     const pos = getCanvasMousePos(e);
+    // 먼저 객체가 클릭되었는지 확인합니다.
     const clicked = checkClickedObject(pos.x, pos.y);
-    if (!clicked) {
+    if (clicked) {
+      // 객체가 클릭되었으면 InfoPanel 열기
+      setClickedObject(clicked);
+      if (onObjectClick) onObjectClick(clicked);
+      return;
+    }
+    // 객체가 없고, 스테이션 추가 모드라면 새 스테이션 추가
+    if (activeMenu === 3) {
+      const mapCoord = inverseTransformCoordinates(pos.x, pos.y);
+      if (onAddStation) {
+        onAddStation(mapCoord.x, mapCoord.y);
+      }
+      setStationAddInfo(null);
+    } else {
+      // 그 외의 경우에는 기존 상태 초기화
       setTooltip(null);
       if (onObjectClick) onObjectClick(null);
       setClickedObject(null);
-      return;
     }
-    setClickedObject(clicked);
-    if (onObjectClick) onObjectClick(clicked);
   };
+
+  const canvasCursorStyle = activeMenu === 3 ? "crosshair" : "default";
 
   // 우클릭: advancedCurve인 경우에만 "수정" 메뉴 표시하고, 스테이션(advancedPoint)은 메뉴 없이 path만 표시
   const handleContextMenu = (e) => {
@@ -259,6 +271,19 @@ const MapCanvas = ({
 
   const handleMouseMove = (e) => {
     const pos = getCanvasMousePos(e);
+    //스테이션 추가 모드
+    if (activeMenu === 3) {
+      const mapCoord = inverseTransformCoordinates(pos.x, pos.y);
+      setStationAddInfo({
+        clientPos: { x: e.clientX, y: e.clientY },
+        mapCoord: mapCoord,
+      });
+      // 스테이션 추가 모드일 때는 다른 hover 처리 등은 건너뜁니다.
+      return;
+    } else {
+      // 스테이션 추가 모드가 아니면 관련 정보 초기화
+      if (stationAddInfo) setStationAddInfo(null);
+    }
     // 편집 모드: 제어 핸들 드래그 처리
     if (draggingHandle && editingCurve) {
       const sensitivity = 1.0;
@@ -374,6 +399,27 @@ const MapCanvas = ({
       y: mouseY - newRatioY * (height * newScale),
     });
   };
+  // mapData가 바뀔 때, 클릭된 객체를 최신 데이터로 업데이트
+  useEffect(() => {
+    if (clickedObject) {
+      let updatedObj = null;
+      if (clickedObject.type === "advancedPoint") {
+        updatedObj = mapData.advancedPointList.find(
+          (point) => point.instanceName === clickedObject.data.instanceName
+        );
+        if (updatedObj) {
+          setClickedObject({ type: "advancedPoint", data: updatedObj });
+        }
+      } else if (clickedObject.type === "advancedCurve") {
+        updatedObj = mapData.advancedCurveList.find(
+          (curve) => curve.instanceName === clickedObject.data.instanceName
+        );
+        if (updatedObj) {
+          setClickedObject({ type: "advancedCurve", data: updatedObj });
+        }
+      }
+    }
+  }, [mapData]);
 
   // 그리기 로직
   useEffect(() => {
@@ -659,7 +705,12 @@ const MapCanvas = ({
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ width: "100%", height: "100%", background: "#fff" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          background: "#fff",
+          cursor: canvasCursorStyle,
+        }}
         onClick={handleCanvasClick}
         onContextMenu={handleContextMenu}
         onWheel={handleWheel}
@@ -697,6 +748,25 @@ const MapCanvas = ({
           >
             수정
           </div>
+        </div>
+      )}
+      {stationAddInfo && activeMenu === 3 && (
+        <div
+          style={{
+            position: "fixed",
+            left: stationAddInfo.clientPos.x + 10,
+            top: stationAddInfo.clientPos.y + 10,
+            background: "white",
+            border: "1px solid black",
+            padding: "4px 8px",
+            borderRadius: "4px",
+            zIndex: 1000,
+            fontSize: "12px",
+          }}
+        >
+          {`X: ${stationAddInfo.mapCoord.x.toFixed(
+            2
+          )}, Y: ${stationAddInfo.mapCoord.y.toFixed(2)}`}
         </div>
       )}
     </div>
