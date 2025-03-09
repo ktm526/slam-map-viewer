@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onRobotDataUpdate: (callback) => {
         ipcRenderer.on('robot-data-update', (event, data) => {
-            console.log('Robot data received in renderer:', data);
+            console.log('Robot data received in renderer:', da);
             callback(data);
         });
     },

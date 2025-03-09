@@ -805,13 +805,22 @@ ipcMain.handle('subscribe-to-push-data', (event, amrIp, port) => {
     });
 });
 
-// 헤더 파싱 함수 (예제)
+// // 헤더 파싱 함수 (예제)
+// function parseHeader(buffer) {
+//     return {
+//         dataLength: buffer.readUInt32BE(4), // 헤더에서 데이터 길이 추출 (예제)
+//     };
+// }
 function parseHeader(buffer) {
     return {
-        dataLength: buffer.readUInt32BE(4), // 헤더에서 데이터 길이 추출 (예제)
+        syncHeader: buffer.readUInt8(0),
+        version: buffer.readUInt8(1),
+        serialNumber: buffer.readUInt16BE(2),
+        dataLength: buffer.readUInt32BE(4),
+        apiNumber: buffer.readUInt16BE(8),
+        reserved: buffer.slice(10, 16),
     };
 }
-
 
 // AMR 데이터 구독 중단
 ipcMain.handle('unsubscribe-from-push-data', () => {

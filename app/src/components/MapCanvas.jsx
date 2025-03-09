@@ -183,16 +183,16 @@ const MapCanvas = ({
     if (onObjectClick) onObjectClick(clicked);
   };
 
-  // 우클릭: 애플 스타일의 메뉴 표시 (수정/삭제)
+  // 우클릭: advancedCurve인 경우에만 "수정" 메뉴 표시하고, 스테이션(advancedPoint)은 메뉴 없이 path만 표시
   const handleContextMenu = (e) => {
     e.preventDefault();
     const pos = getCanvasMousePos(e);
     const obj = checkClickedObject(pos.x, pos.y);
     if (obj) {
+      // 스테이션인 경우 메뉴 없이 바로 return
+      if (obj.type === "advancedPoint") return;
       let refPoint = null;
-      if (obj.type === "advancedPoint")
-        refPoint = transformCoordinates(obj.data.pos.x, obj.data.pos.y);
-      else if (obj.type === "advancedCurve") {
+      if (obj.type === "advancedCurve") {
         const start = transformCoordinates(
           obj.data.startPos.pos.x,
           obj.data.startPos.pos.y
@@ -520,7 +520,7 @@ const MapCanvas = ({
 
       // station 이름 표시 (사각형 아래)
       ctx.fillStyle = "black";
-      ctx.font = `${20 * (scale / 40)}px Arial`;
+      ctx.font = `${10 * (scale / 40)}px Arial`;
       ctx.textAlign = "center";
       ctx.fillText(
         station.instanceName,
@@ -619,6 +619,7 @@ const MapCanvas = ({
 
     // AMR 위치 (이미지) 그리기
     if (amrPosition) {
+      console.log(amrPosition);
       const amrImageData = localStorage.getItem("amrImage");
       const amrWidthStr = localStorage.getItem("amrWidth");
       const amrHeightStr = localStorage.getItem("amrHeight");
@@ -695,15 +696,6 @@ const MapCanvas = ({
             }}
           >
             수정
-          </div>
-          <div
-            style={{
-              cursor: "pointer",
-              padding: "4px 8px",
-              borderTop: "1px solid #ddd",
-            }}
-          >
-            삭제
           </div>
         </div>
       )}

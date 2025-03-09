@@ -13,6 +13,9 @@ let currentMapData = null; // 메인 프로세스에 저장될 mapData
 const settingsFilePath = path.join(app.getPath('userData'), 'settings.json');
 app.commandLine.appendSwitch('disable-http-cache');
 
+// 전역 변수 선언: AMR IP와 TCP 클라이언트
+let storedAmrIp = null; // 메모리에 저장된 AMR IP
+let tcpClient = null;   // AMR 데이터 구독에 사용될 TCP 클라이언트
 
 ipcMain.on('map-data-to-main', (event, mapData) => {
     console.log('Received mapData from renderer:', mapData);
@@ -33,13 +36,13 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false, // 보안 강화를 위해 false로 설정
             contextIsolation: true, // 보안 강화를 위해 true로 설정
-
-        }, icon: path.join(__dirname, 'assets', 'favicon.ico'), // 아이콘 경로 설정
-
+        },
+        icon: path.join(__dirname, 'assets', 'favicon.ico'),
     });
 
     win.maximize(); // 창 최대화
     win.webContents.openDevTools();
+
     // 메뉴 템플릿 정의
     const template = [
         {
@@ -53,30 +56,22 @@ function createWindow() {
                             // 파일 선택 대화상자 열기
                             const { canceled, filePaths } = await dialog.showOpenDialog({
                                 title: 'JSON 파일 선택',
-                                defaultPath: path.join(__dirname), // 기본 폴더를 'data'로 설정
+                                defaultPath: path.join(__dirname),
                                 buttonLabel: '열기',
                                 filters: [
                                     { name: 'JSON Files', extensions: ['json'] },
                                     { name: 'All Files', extensions: ['*'] },
                                 ],
-                                properties: ['openFile'], // 파일 열기만 허용
+                                properties: ['openFile'],
                             });
 
-                            // 파일 선택이 취소되었는지 확인
                             if (canceled || filePaths.length === 0) {
-                                return; // 취소 시 아무 작업도 하지 않음
+                                return;
                             }
 
-                            // 선택된 파일 경로 가져오기
                             const selectedFile = filePaths[0];
-
-                            // 파일 내용 읽기
                             const fileContent = fs.readFileSync(selectedFile, 'utf-8');
-
-                            // JSON 데이터 파싱
                             const jsonData = JSON.parse(fileContent);
-
-                            // 데이터 처리 (렌더러 프로세스로 전송)
                             win.webContents.send('file-opened', jsonData);
                         } catch (error) {
                             console.error("Error opening file:", error);
@@ -84,7 +79,6 @@ function createWindow() {
                         }
                     }
                 },
-
                 {
                     label: '파일 저장',
                     accelerator: 'CmdOrCtrl+S',
@@ -104,7 +98,7 @@ function createWindow() {
                         });
 
                         if (saveDialogResult.canceled || !saveDialogResult.filePath) {
-                            return; // 사용자가 저장 취소
+                            return;
                         }
 
                         try {
@@ -123,14 +117,12 @@ function createWindow() {
                 {
                     label: 'AMR에서 파일 불러오기',
                     click: async () => {
-                        //const amrIp = '192.168.196.102'; // AMR IP
                         if (!storedAmrIp) {
                             dialog.showErrorBox('오류', 'AMR IP가 설정되지 않았습니다.');
                             return;
                         }
 
                         try {
-                            // Fetch map list from AMR
                             const mapListResponse = await fetchMapListFromAMR(storedAmrIp);
                             if (mapListResponse.ret_code !== 0) {
                                 dialog.showErrorBox('오류', `맵 목록을 가져오는 중 오류가 발생했습니다: ${mapListResponse.err_msg || '알 수 없는 오류'}`);
@@ -147,22 +139,20 @@ function createWindow() {
                                 return;
                             }
 
-                            // 취소 버튼 포함 리스트 생성
                             const buttons = mapNames.map((name, index) => `${index + 1}. ${name}`);
-                            buttons.push('취소'); // 취소 버튼 추가
+                            buttons.push('취소');
 
-                            // 맵 선택 dialog
                             const response = await dialog.showMessageBox({
                                 type: 'question',
                                 title: '맵 선택',
                                 message: '다운로드할 맵을 선택하세요:\n(버튼이 많을 경우 창이 자동으로 스크롤됩니다)',
                                 buttons,
-                                cancelId: buttons.length - 1, // '취소' 버튼을 취소 ID로 설정
-                                defaultId: 0, // 첫 번째 버튼을 기본값으로 설정
+                                cancelId: buttons.length - 1,
+                                defaultId: 0,
                             });
 
                             const selectedMapIndex = response.response;
-                            if (selectedMapIndex === buttons.length - 1) { // '취소' 버튼 확인
+                            if (selectedMapIndex === buttons.length - 1) {
                                 console.log('맵 선택이 취소되었습니다.');
                                 return;
                             }
@@ -170,8 +160,8 @@ function createWindow() {
                             const selectedMap = mapNames[selectedMapIndex];
                             console.log('Selected Map:', selectedMap);
 
-                            // Download selected map
-                            const downloadedMap = await downloadMapFromAMR(amrIp, selectedMap);
+                            // storedAmrIp를 사용하도록 수정
+                            const downloadedMap = await downloadMapFromAMR(storedAmrIp, selectedMap);
 
                             const mainWindow = BrowserWindow.getFocusedWindow();
                             if (mainWindow) {
@@ -190,28 +180,22 @@ function createWindow() {
                         }
                     },
                 },
-
-
-
                 {
                     label: 'AMR에 파일 업로드',
                     click: async () => {
                         console.log("AMR에 파일 업로드 선택됨");
 
-                        // AMR IP 설정 여부 확인
                         if (!storedAmrIp) {
                             dialog.showErrorBox('오류', 'AMR IP가 설정되지 않았습니다.');
                             return;
                         }
 
-                        // 업로드할 mapData 여부 확인
                         if (!currentMapData) {
                             dialog.showErrorBox('오류', '업로드할 맵 데이터가 없습니다.');
                             return;
                         }
 
                         try {
-                            // 실제 업로드 진행
                             const result = await uploadMapToAMR(storedAmrIp, currentMapData);
                             console.log("Upload result:", result);
 
@@ -226,7 +210,6 @@ function createWindow() {
                         }
                     }
                 },
-
                 { type: 'separator' },
                 { role: 'quit' }
             ]
@@ -243,7 +226,6 @@ function createWindow() {
         win.loadFile(path.join(__dirname, 'react-dist', 'index.html'));
     }
 
-    // React 앱이 로드된 후 창 제목 다시 설정
     win.webContents.on('did-finish-load', () => {
         win.setTitle('SLAM map viewer');
     });
@@ -263,13 +245,10 @@ app.whenReady().then(() => {
 });
 
 ipcMain.handle('get-current-mapdata', async () => {
-    // 렌더러 프로세스에서 제공하는 현재 mapData를 반환
-    // 실제 mapData는 렌더러 프로세스에서 관리 중이라고 가정
-    const mapData = { /* 예시 데이터: 렌더러에서 전달받은 JSON 객체 */ };
-    return mapData; // 렌더러에서 현재 mapData를 제공받아야 함 EYL42@8430
+    const mapData = { /* 예시 데이터 */ };
+    return mapData;
 });
 
-// TCP API 호출 핸들러 유지
 ipcMain.handle('tcp-call', async (event, host, port, message) => {
     return new Promise((resolve) => {
         const client = new net.Socket();
@@ -281,7 +260,7 @@ ipcMain.handle('tcp-call', async (event, host, port, message) => {
 
         client.on('data', (data) => {
             response += data.toString();
-            client.destroy(); // 데이터 수신 후 연결 종료
+            client.destroy();
         });
 
         client.on('close', () => {
@@ -294,7 +273,6 @@ ipcMain.handle('tcp-call', async (event, host, port, message) => {
     });
 });
 
-// 맵 데이터 저장 핸들러 유지
 ipcMain.handle('save-map-data', async (event, mapData) => {
     try {
         const filePath = await getSaveFilePath();
@@ -306,7 +284,6 @@ ipcMain.handle('save-map-data', async (event, mapData) => {
     }
 });
 
-// 파일 경로를 얻는 함수 유지
 const getSaveFilePath = () => {
     return new Promise((resolve, reject) => {
         dialog.showSaveDialog({
@@ -328,7 +305,6 @@ const getSaveFilePath = () => {
     });
 };
 
-// AMR 이동 TCP 요청 핸들러
 ipcMain.handle('send-tcp-request', async (event, ipAddress, direction) => {
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
@@ -380,7 +356,7 @@ function createMovementRequest(direction) {
     const syncHeader = 0x5A;
     const version = 0x01;
     const serialNumber = Math.floor(Math.random() * 65536);
-    const apiNumber = 2010; // Open Loop Motion API
+    const apiNumber = 2010;
     const reserved = Buffer.alloc(6, 0x00);
 
     let vx = 0, vy = 0, w = 0, duration = 500;
@@ -418,27 +394,22 @@ function createMovementRequest(direction) {
 
 function parseHeader(buffer) {
     return {
-        syncHeader: buffer.readUInt8(0),
-        version: buffer.readUInt8(1),
-        serialNumber: buffer.readUInt16BE(2),
         dataLength: buffer.readUInt32BE(4),
-        apiNumber: buffer.readUInt16BE(8),
-        reserved: buffer.slice(10, 16),
     };
 }
 
 function fetchMapListFromAMR(amrIp) {
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
-        const PORT = 19204; // Replace with the correct AMR port for map requests
+        const PORT = 19204;
 
         const requestBuffer = Buffer.alloc(16);
-        requestBuffer.writeUInt8(0x5A, 0); // syncHeader
-        requestBuffer.writeUInt8(0x01, 1); // version
-        requestBuffer.writeUInt16BE(Math.floor(Math.random() * 65536), 2); // serialNumber
-        requestBuffer.writeUInt32BE(0, 4); // dataLength
-        requestBuffer.writeUInt16BE(0x0514, 8); // API number for map list
-        requestBuffer.fill(0, 10, 16); // reserved
+        requestBuffer.writeUInt8(0x5A, 0);
+        requestBuffer.writeUInt8(0x01, 1);
+        requestBuffer.writeUInt16BE(Math.floor(Math.random() * 65536), 2);
+        requestBuffer.writeUInt32BE(0, 4);
+        requestBuffer.writeUInt16BE(0x0514, 8);
+        requestBuffer.fill(0, 10, 16);
 
         client.connect(PORT, amrIp, () => {
             client.write(requestBuffer);
@@ -483,19 +454,18 @@ function fetchMapListFromAMR(amrIp) {
 function downloadMapFromAMR(amrIp, mapName) {
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
-        const PORT = 19207; // Replace with the correct AMR port for map requests
+        const PORT = 19207;
 
         const requestData = JSON.stringify({ map_name: mapName });
         const requestBuffer = Buffer.alloc(16 + Buffer.byteLength(requestData));
 
-        // Write protocol header
-        requestBuffer.writeUInt8(0x5A, 0); // syncHeader
-        requestBuffer.writeUInt8(0x01, 1); // version
-        requestBuffer.writeUInt16BE(Math.floor(Math.random() * 65536), 2); // serialNumber
-        requestBuffer.writeUInt32BE(Buffer.byteLength(requestData), 4); // dataLength
-        requestBuffer.writeUInt16BE(0x0FAB, 8); // API number for downloading maps
-        requestBuffer.fill(0, 10, 16); // reserved
-        requestBuffer.write(requestData, 16); // JSON data area
+        requestBuffer.writeUInt8(0x5A, 0);
+        requestBuffer.writeUInt8(0x01, 1);
+        requestBuffer.writeUInt16BE(Math.floor(Math.random() * 65536), 2);
+        requestBuffer.writeUInt32BE(Buffer.byteLength(requestData), 4);
+        requestBuffer.writeUInt16BE(0x0FAB, 8);
+        requestBuffer.fill(0, 10, 16);
+        requestBuffer.write(requestData, 16);
 
         client.connect(PORT, amrIp, () => {
             client.write(requestBuffer);
@@ -520,7 +490,7 @@ function downloadMapFromAMR(amrIp, mapName) {
                         if (jsonData.ret_code && jsonData.ret_code !== 0) {
                             reject(new Error(jsonData.err_msg || 'Unknown error'));
                         } else {
-                            resolve(jsonData); // Resolve with map data
+                            resolve(jsonData);
                         }
                         client.destroy();
                     } catch (error) {
@@ -541,16 +511,6 @@ function downloadMapFromAMR(amrIp, mapName) {
         });
     });
 }
-// ipcMain.handle('get-map-data', async () => {
-//     const focusedWindow = BrowserWindow.getFocusedWindow();
-//     if (!focusedWindow) {
-//         throw new Error("No active window found");
-//     }
-
-//     // 비동기적으로 렌더러 프로세스에 요청
-//     return await focusedWindow.webContents.executeJavaScript('window.electronAPI.getCurrentMapData()');
-// });
-
 
 ipcMain.handle('show-map-list', async (event, mapNames) => {
     const mapWindow = new BrowserWindow({
@@ -574,44 +534,13 @@ ipcMain.handle('show-map-list', async (event, mapNames) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>맵 파일 선택</title>
             <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    margin: 0;
-                    padding: 0;
-                    overflow: hidden;
-                }
-                .container {
-                    display: flex;
-                    flex-direction: column;
-                    height: 100%;
-                    overflow: hidden;
-                }
-                .map-list {
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 10px;
-                    border-bottom: 1px solid #ccc;
-                }
-                .map-item {
-                    padding: 10px;
-                    border: 1px solid #ccc;
-                    margin-bottom: 5px;
-                    cursor: pointer;
-                }
-                .map-item:hover {
-                    background-color: #f0f0f0;
-                }
-                .actions {
-                    padding: 10px;
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 10px;
-                }
-                button {
-                    padding: 8px 16px;
-                    font-size: 14px;
-                    cursor: pointer;
-                }
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; overflow: hidden; }
+                .container { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+                .map-list { flex: 1; overflow-y: auto; padding: 10px; border-bottom: 1px solid #ccc; }
+                .map-item { padding: 10px; border: 1px solid #ccc; margin-bottom: 5px; cursor: pointer; }
+                .map-item:hover { background-color: #f0f0f0; }
+                .actions { padding: 10px; display: flex; justify-content: flex-end; gap: 10px; }
+                button { padding: 8px 16px; font-size: 14px; cursor: pointer; }
             </style>
         </head>
         <body>
@@ -624,6 +553,7 @@ ipcMain.handle('show-map-list', async (event, mapNames) => {
                 </div>
             </div>
             <script>
+                // 참고: nodeIntegration이 false이므로, preload에서 ipcRenderer를 노출시켜야 합니다.
                 const { ipcRenderer } = require('electron');
                 document.querySelectorAll('.map-item').forEach(item => {
                     item.addEventListener('click', () => {
@@ -640,7 +570,7 @@ ipcMain.handle('show-map-list', async (event, mapNames) => {
 
     ipcMain.once('map-selected', (event, selectedMap) => {
         mapWindow.close();
-        event.returnValue = selectedMap; // 선택된 맵 반환
+        event.returnValue = selectedMap;
     });
 
     ipcMain.once('map-cancel', () => {
@@ -649,32 +579,25 @@ ipcMain.handle('show-map-list', async (event, mapNames) => {
 
     return new Promise((resolve, reject) => {
         mapWindow.once('closed', () => {
-            resolve(null); // 창 닫힐 때 취소
+            resolve(null);
         });
     });
 });
-let storedAmrIp = null; // 메모리에 저장된 AMR IP
 
-// main.js
 ipcMain.handle('set-amr-ip', async (event, amrIp) => {
     console.log("Setting AMR IP:", amrIp);
     storedAmrIp = amrIp;
 
-    // 현재 설정 파일 읽어오기
     let currentSettings = loadSettings();
     currentSettings.amrIp = amrIp;
     saveSettings(currentSettings);
 
-    // 업데이트된 값을 반환 (필요시)
     return storedAmrIp;
 });
-
 
 app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
 });
-
-
 
 function loadSettings() {
     try {
@@ -696,57 +619,35 @@ function saveSettings(settings) {
     }
 }
 
-// 예: 업로드용 API 번호 (문서에 따라 적절히 수정 필요)
 const API_NUMBER_FOR_UPLOAD = 0x0FAC;
 
-/**
- * AMR로 mapData를 업로드하는 함수
- * @param {string} amrIp - AMR IP
- * @param {object} mapData - 업로드할 맵 데이터(객체)
- * @returns {Promise<object>} - 업로드 결과(AMR 측 응답)
- */
 function uploadMapToAMR(amrIp, mapData) {
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
-        const PORT = 19205; // 업로드에 사용되는 포트
+        const PORT = 19205;
 
-        // 1) JSON 직렬화
         const jsonString = JSON.stringify(mapData);
-
-        // 2) 패킷 헤더 + JSON 데이터를 담을 버퍼 생성
         const headerSize = 16;
         const dataLength = Buffer.byteLength(jsonString);
         const buffer = Buffer.alloc(headerSize + dataLength);
 
-        // 3) 헤더 작성
-        // 3-1) Sync Header (1 byte, 0x5A)
         buffer.writeUInt8(0x5A, 0);
-        // 3-2) Protocol version (1 byte, 0x01)
         buffer.writeUInt8(0x01, 1);
-        // 3-3) Serial number (2 bytes, 0~65535 범위 임의로)
         buffer.writeUInt16BE(Math.floor(Math.random() * 65536), 2);
-        // 3-4) Data area length (4 bytes, JSON 바이트 길이)
         buffer.writeUInt32BE(dataLength, 4);
-        // 3-5) Message type (API number) (2 bytes)
         buffer.writeUInt16BE(API_NUMBER_FOR_UPLOAD, 8);
-        // 3-6) Reserved area (6 bytes, 0으로 채움)
         buffer.fill(0, 10, 16);
-
-        // 4) JSON 데이터를 헤더 뒤에 작성
         buffer.write(jsonString, 16);
 
-        // 5) TCP 연결 후 버퍼 전송
         client.connect(PORT, amrIp, () => {
             client.write(buffer);
         });
 
         let responseBuffer = Buffer.alloc(0);
 
-        // 6) 응답 수신
         client.on('data', (chunk) => {
             responseBuffer = Buffer.concat([responseBuffer, chunk]);
 
-            // 최소 헤더(16바이트) 수신 확인
             if (responseBuffer.length >= 16) {
                 const dataLen = responseBuffer.readUInt32BE(4);
                 if (responseBuffer.length >= 16 + dataLen) {
@@ -768,7 +669,6 @@ function uploadMapToAMR(amrIp, mapData) {
             }
         });
 
-        // 에러 처리
         client.on('error', (err) => {
             reject(err);
             client.destroy();
@@ -779,3 +679,68 @@ function uploadMapToAMR(amrIp, mapData) {
         });
     });
 }
+
+ipcMain.handle('subscribe-to-push-data', (event, amrIp, port) => {
+    return new Promise((resolve, reject) => {
+        let responseBuffer = Buffer.alloc(0);
+        tcpClient = new net.Socket();
+
+        tcpClient.connect(port, amrIp, () => {
+            console.log(`Connected to AMR at ${amrIp}:${port}`);
+            resolve(true);
+        });
+
+        tcpClient.on('data', (data) => {
+            console.log('Received data:', data);
+            responseBuffer = Buffer.concat([responseBuffer, data]);
+
+            while (responseBuffer.length >= 16) {
+                const header = parseHeader(responseBuffer.slice(0, 16));
+                console.log('Parsed header:', header);
+                const expectedLength = 16 + header.dataLength;
+
+                if (responseBuffer.length >= expectedLength) {
+                    const packet = responseBuffer.slice(0, expectedLength);
+                    responseBuffer = responseBuffer.slice(expectedLength);
+
+                    const dataArea = packet.slice(16);
+                    console.log('Data area:', dataArea);
+                    try {
+                        const jsonData = JSON.parse(dataArea.toString());
+                        console.log('Decoded push data:', jsonData);
+
+                        event.sender.send('push-data', jsonData);
+                    } catch (error) {
+                        console.error(`Failed to parse JSON data: ${error.message}`);
+                    }
+                } else {
+                    console.log('Not yet full packet');
+                    break;
+                }
+            }
+        });
+
+        tcpClient.on('error', (err) => {
+            console.error('TCP connection error:', err.message);
+            reject(err);
+        });
+
+        tcpClient.on('close', () => {
+            console.log('TCP connection closed');
+        });
+
+        tcpClient.on('timeout', () => {
+            console.error('TCP request timed out');
+            reject(new Error('TCP request timed out'));
+            tcpClient.destroy();
+        });
+    });
+});
+
+ipcMain.handle('unsubscribe-from-push-data', () => {
+    if (tcpClient) {
+        tcpClient.destroy();
+        tcpClient = null;
+        console.log('Disconnected from AMR');
+    }
+});
