@@ -25,7 +25,7 @@ const MapCanvas = ({
   const [editingCurve, setEditingCurve] = useState(null);
   const [draggingHandle, setDraggingHandle] = useState(null);
 
-  //스테이션 추가 관련 상태
+  // 스테이션 추가 관련 상태
   const [stationAddInfo, setStationAddInfo] = useState(null);
 
   // 맵 좌표 영역 (map unit 1 = 1m로 가정)
@@ -80,7 +80,6 @@ const MapCanvas = ({
   }, [mapData, canvasSize, scale]);
 
   // 좌표 변환 함수 (맵 좌표 -> 화면 좌표)
-  // map unit 1을 1m로 취급합니다.
   const transformCoordinates = (mapX, mapY) => {
     const mapWidth = maxPos.current.x - minPos.current.x;
     const mapHeight = maxPos.current.y - minPos.current.y;
@@ -166,19 +165,16 @@ const MapCanvas = ({
     return found;
   };
 
-  // 왼쪽 클릭: 빈 공간 클릭 시 InfoPanel 제거
+  // 왼쪽 클릭: 빈 공간 클릭 시 InfoPanel 제거 또는 스테이션 추가 처리
   const handleCanvasClick = (e) => {
     e.preventDefault();
     const pos = getCanvasMousePos(e);
-    // 먼저 객체가 클릭되었는지 확인합니다.
     const clicked = checkClickedObject(pos.x, pos.y);
     if (clicked) {
-      // 객체가 클릭되었으면 InfoPanel 열기
       setClickedObject(clicked);
       if (onObjectClick) onObjectClick(clicked);
       return;
     }
-    // 객체가 없고, 스테이션 추가 모드라면 새 스테이션 추가
     if (activeMenu === 3) {
       const mapCoord = inverseTransformCoordinates(pos.x, pos.y);
       if (onAddStation) {
@@ -186,7 +182,6 @@ const MapCanvas = ({
       }
       setStationAddInfo(null);
     } else {
-      // 그 외의 경우에는 기존 상태 초기화
       setTooltip(null);
       if (onObjectClick) onObjectClick(null);
       setClickedObject(null);
@@ -195,16 +190,16 @@ const MapCanvas = ({
 
   const canvasCursorStyle = activeMenu === 3 ? "crosshair" : "default";
 
-  // 우클릭: advancedCurve인 경우에만 "수정" 메뉴 표시하고, 스테이션(advancedPoint)은 메뉴 없이 path만 표시
+  // 우클릭 처리: 스테이션(advancedPoint)인 경우 "해당 위치로 이동" 메뉴를, 경로(advancedCurve)인 경우 "수정" 메뉴를 표시
   const handleContextMenu = (e) => {
     e.preventDefault();
     const pos = getCanvasMousePos(e);
     const obj = checkClickedObject(pos.x, pos.y);
     if (obj) {
-      // 스테이션인 경우 메뉴 없이 바로 return
-      if (obj.type === "advancedPoint") return;
       let refPoint = null;
-      if (obj.type === "advancedCurve") {
+      if (obj.type === "advancedPoint") {
+        refPoint = transformCoordinates(obj.data.pos.x, obj.data.pos.y);
+      } else if (obj.type === "advancedCurve") {
         const start = transformCoordinates(
           obj.data.startPos.pos.x,
           obj.data.startPos.pos.y
@@ -237,8 +232,68 @@ const MapCanvas = ({
         };
       }
       const clientPos = getClientCoordinates(refPoint);
-      setTooltip({ x: clientPos.x + 2, y: clientPos.y + 2, object: obj });
+      if (obj.type === "advancedPoint") {
+        setTooltip({
+          x: clientPos.x + 2,
+          y: clientPos.y + 2,
+          object: obj,
+          action: () => handleMoveToStation(obj.data),
+        });
+      } else if (obj.type === "advancedCurve") {
+        setTooltip({
+          x: clientPos.x + 2,
+          y: clientPos.y + 2,
+          object: obj,
+          action: () => {
+            setEditingCurve(obj.data);
+            setTooltip(null);
+          },
+        });
+      }
     }
+  };
+
+  // 스테이션 우클릭 시 "해당 위치로 이동" 액션 처리
+  const handleMoveToStation = (station) => {
+    setTooltip(null);
+
+    // 1) 전송할 JSON 데이터 생성 (id: 대상 스테이션, source_id: "SELF_POSITION")
+    const requestData = {
+      id: station.instanceName, // 예: "LM3"
+      source_id: "SELF_POSITION", // 출발 지점은 현재 로봇 위치
+    };
+
+    // 2) JSON → UTF-8 직렬화
+    const jsonStr = JSON.stringify(requestData);
+    const encoder = new TextEncoder();
+    const body = encoder.encode(jsonStr); // 데이터 영역
+
+    // 3) 헤더(16바이트) 생성
+    //    - ID(3051 = 0x0BEB)
+    //    - 길이(body.length) 빅엔디안 표기
+    //    - 기타 고정 필드
+    const header = new Uint8Array(16);
+    header[0] = 0x5a; // 시작 바이트
+    header[1] = 0x01;
+    header[2] = 0x00;
+    header[3] = 0x01;
+    // 데이터 길이(4~7)
+    header[4] = (body.length >> 24) & 0xff;
+    header[5] = (body.length >> 16) & 0xff;
+    header[6] = (body.length >> 8) & 0xff;
+    header[7] = body.length & 0xff;
+    // API ID (8~9) → 0x0B EB (3051)
+    header[8] = 0x0b;
+    header[9] = 0xeb;
+    // 나머지 10~15는 0
+    // 4) 헤더 + 데이터 영역 합치기
+    const message = new Uint8Array(header.length + body.length);
+    message.set(header, 0);
+    message.set(body, header.length);
+
+    // 5) TCP 전송 (포트 19206)
+    //    - 실제 구현은 Electron Main에서 socket.send(...) 하도록 래핑
+    window.electronAPI.sendTcpRequest(19206, message);
   };
 
   // 편집 모드에서 제어 핸들 드래그 처리
@@ -271,20 +326,16 @@ const MapCanvas = ({
 
   const handleMouseMove = (e) => {
     const pos = getCanvasMousePos(e);
-    //스테이션 추가 모드
     if (activeMenu === 3) {
       const mapCoord = inverseTransformCoordinates(pos.x, pos.y);
       setStationAddInfo({
         clientPos: { x: e.clientX, y: e.clientY },
         mapCoord: mapCoord,
       });
-      // 스테이션 추가 모드일 때는 다른 hover 처리 등은 건너뜁니다.
       return;
     } else {
-      // 스테이션 추가 모드가 아니면 관련 정보 초기화
       if (stationAddInfo) setStationAddInfo(null);
     }
-    // 편집 모드: 제어 핸들 드래그 처리
     if (draggingHandle && editingCurve) {
       const sensitivity = 1.0;
       const deltaScreen = {
@@ -306,8 +357,6 @@ const MapCanvas = ({
       setLastMousePos(pos);
       return;
     }
-
-    // Hover 체크
     setHoveredObject(() => {
       let hovered = null;
       (mapData.advancedPointList || []).forEach((station) => {
@@ -349,7 +398,6 @@ const MapCanvas = ({
       }
       return hovered;
     });
-
     if (isDragging) {
       const dx = pos.x - lastMousePos.x;
       const dy = pos.y - lastMousePos.y;
@@ -399,6 +447,7 @@ const MapCanvas = ({
       y: mouseY - newRatioY * (height * newScale),
     });
   };
+
   // mapData가 바뀔 때, 클릭된 객체를 최신 데이터로 업데이트
   useEffect(() => {
     if (clickedObject) {
@@ -515,8 +564,7 @@ const MapCanvas = ({
     // Station(advancedPointList) 마커 그리기
     (mapData.advancedPointList || []).forEach((station) => {
       const { x, y } = transformCoordinates(station.pos.x, station.pos.y);
-      const dir = station.dir; // dir은 라디안 단위입니다.
-      // 로컬 스토리지에서 AMR 사이즈 읽기 (없으면 기본값 사용)
+      const dir = station.dir;
       const amrWidthStr = localStorage.getItem("amrWidth");
       const amrHeightStr = localStorage.getItem("amrHeight");
       let markerScreenWidth = 80,
@@ -530,7 +578,6 @@ const MapCanvas = ({
         markerScreenWidth = 80 * (scale / 40);
         markerScreenHeight = 120 * (scale / 40);
       }
-      // station 사각형 그리기
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(dir);
@@ -542,12 +589,9 @@ const MapCanvas = ({
         markerScreenWidth,
         markerScreenHeight
       );
-      // 방향을 나타내는 세모(arrow)를 주황색으로 추가
       ctx.fillStyle = "orange";
       ctx.beginPath();
-      // 세모의 tip은 사각형 상단 중앙에 위치 (Y: -markerScreenHeight/2)
       const arrowTipY = -markerScreenHeight / 2;
-      // 세모 크기는 station 크기에 비례 (임의 조정)
       const arrowHeight = 10 * (scale / 40);
       const arrowWidth = markerScreenWidth / 4;
       ctx.moveTo(0, arrowTipY);
@@ -557,14 +601,12 @@ const MapCanvas = ({
       ctx.fill();
       ctx.restore();
 
-      // station 중심 표시 (작은 원, scale 적용)
       ctx.fillStyle = "orange";
       ctx.beginPath();
       const centerRadius = 6 * (scale / 40);
       ctx.arc(x, y, centerRadius, 0, 2 * Math.PI);
       ctx.fill();
 
-      // station 이름 표시 (사각형 아래)
       ctx.fillStyle = "black";
       ctx.font = `${10 * (scale / 40)}px Arial`;
       ctx.textAlign = "center";
@@ -601,7 +643,6 @@ const MapCanvas = ({
           object.data.pos.y
         );
         const dir = object.data.dir;
-        // station 마커 크기 계산 (위와 동일)
         const amrWidthStr = localStorage.getItem("amrWidth");
         const amrHeightStr = localStorage.getItem("amrHeight");
         let markerScreenWidth = 80,
@@ -740,13 +781,16 @@ const MapCanvas = ({
           <div
             style={{ cursor: "pointer", padding: "4px 8px" }}
             onClick={() => {
-              if (tooltip.object && tooltip.object.type === "advancedCurve") {
-                setEditingCurve(tooltip.object.data);
+              if (tooltip.action) {
+                tooltip.action();
+              } else {
+                setTooltip(null);
               }
-              setTooltip(null);
             }}
           >
-            수정
+            {tooltip.object.type === "advancedPoint"
+              ? "해당 위치로 이동"
+              : "수정"}
           </div>
         </div>
       )}

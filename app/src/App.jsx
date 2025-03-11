@@ -100,11 +100,25 @@ function App() {
     setClickedObject(object);
   };
 
-  // 경로 추가 함수
   const handleAddPath = (startStation, stopStation) => {
+    // 새 경로 인스턴스 이름: "LMx-LMy"
+    const newInstanceName = `${startStation.instanceName}-${stopStation.instanceName}`;
+
+    // 시작과 끝 좌표에서 1/3 및 2/3 지점 계산 (선형 보간)
+    const controlPos1 = {
+      x: startStation.pos.x + (stopStation.pos.x - startStation.pos.x) / 3,
+      y: startStation.pos.y + (stopStation.pos.y - startStation.pos.y) / 3,
+    };
+    const controlPos2 = {
+      x:
+        startStation.pos.x + (2 * (stopStation.pos.x - startStation.pos.x)) / 3,
+      y:
+        startStation.pos.y + (2 * (stopStation.pos.y - startStation.pos.y)) / 3,
+    };
+
     const newPath = {
       className: "DegenerateBezier",
-      instanceName: `${startStation.instanceName}-${stopStation.instanceName}`,
+      instanceName: newInstanceName,
       startPos: {
         instanceName: startStation.instanceName,
         pos: startStation.pos,
@@ -113,30 +127,14 @@ function App() {
         instanceName: stopStation.instanceName,
         pos: stopStation.pos,
       },
-      controlPos1: {
-        x: (startStation.pos.x + stopStation.pos.x) / 2,
-        y: (startStation.pos.y + stopStation.pos.y) / 2,
-      },
-      controlPos2: {
-        x: (startStation.pos.x + stopStation.pos.x) / 2,
-        y: (startStation.pos.y + stopStation.pos.y) / 2,
-      },
+      controlPos1: controlPos1,
+      controlPos2: controlPos2,
       property: [
-        { key: "direction", type: "int", int32Value: 1 },
-        { key: "movestyle", type: "int", int32Value: 0 },
-        { key: "maxspeed", type: "double", doubleValue: 0.3 },
-        { key: "maxdec", type: "double", doubleValue: 0.3 },
-        { key: "maxrot", type: "double", doubleValue: 0 },
-        { key: "obsStopDist", type: "double", doubleValue: 0 },
-        { key: "obsDecDist", type: "double", doubleValue: 0 },
-        { key: "obsExpansion", type: "double", doubleValue: 0 },
-        { key: "decObsExpansion", type: "double", doubleValue: 0 },
-        { key: "loadMaxSpeed", type: "double", doubleValue: 0 },
-        { key: "loadMaxRot", type: "double", doubleValue: 0 },
-        { key: "loadObsStopDist", type: "double", doubleValue: 0 },
-        { key: "loadObsDecDist", type: "double", doubleValue: 0 },
-        { key: "loadObsExpansion", type: "double", doubleValue: 0 },
-        { key: "loadDecObsExpansion", type: "double", doubleValue: 0 },
+        { key: "direction", type: "int", value: "MA==", int32Value: 0 },
+        { key: "movestyle", type: "int", value: "MA==", int32Value: 0 },
+        { key: "maxspeed", type: "double", value: "MC4z", doubleValue: 0.3 },
+        { key: "maxdec", type: "double", value: "MC4z", doubleValue: 0.3 },
+        // 필요한 경우 추가 속성도 여기에 넣을 수 있습니다.
       ],
     };
 
@@ -220,10 +218,21 @@ function App() {
       else break;
     }
     const newName = `LM${newNumber}`;
+    // LM1, LM2와 동일한 구조로 새 스테이션 객체 생성
     const newStation = {
+      className: "LocationMark",
       instanceName: newName,
       pos: { x: mapX, y: mapY },
       dir: 0,
+      property: [
+        {
+          key: "spin",
+          type: "bool",
+          value: "ZmFsc2U=",
+          boolValue: false,
+        },
+      ],
+      ignoreDir: true,
     };
 
     setMapData((prevData) => ({

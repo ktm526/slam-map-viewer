@@ -80,12 +80,63 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
   };
 
   const handleRelocate = () => {
+    // 포트: 19205, API number: 2002 (0x07D2)
     if (relocateMode === "manual") {
-      console.log("수동 재배치:", relocateX, relocateY, relocateAngle);
-      window.electronAPI.relocateAMR(relocateX, relocateY, relocateAngle);
+      const requestObj = {
+        x: parseFloat(relocateX),
+        y: parseFloat(relocateY),
+        angle: parseFloat(relocateAngle),
+      };
+      const jsonStr = JSON.stringify(requestObj);
+      const encoder = new TextEncoder();
+      const data = encoder.encode(jsonStr); // 직렬화된 데이터
+      const dataLength = data.length;
+      // 헤더 생성: 16바이트, bytes 4-7에 데이터 길이(빅엔디안), bytes 8-9에 API number 0x07D2
+      const header = new Uint8Array(16);
+      header[0] = 0x5a;
+      header[1] = 0x01;
+      header[2] = 0x00;
+      header[3] = 0x01;
+      header[4] = (dataLength >> 24) & 0xff;
+      header[5] = (dataLength >> 16) & 0xff;
+      header[6] = (dataLength >> 8) & 0xff;
+      header[7] = dataLength & 0xff;
+      header[8] = 0x07;
+      header[9] = 0xd2;
+      header[10] = 0x00;
+      header[11] = 0x00;
+      header[12] = 0x00;
+      header[13] = 0x00;
+      header[14] = 0x00;
+      header[15] = 0x00;
+      // 메시지 = header + data
+      const message = new Uint8Array(header.length + data.length);
+      message.set(header, 0);
+      message.set(data, header.length);
+      console.log("Manual relocate message:", message);
+      // TCP 요청 전송 (예: electronAPI에 sendTcpRequest 함수가 있다고 가정)
+      window.electronAPI.sendTcpRequest(19205, message);
     } else {
-      console.log("자동 재배치");
-      window.electronAPI.relocateAMRAuto();
+      // Auto 모드: 데이터 영역이 없음 (길이 0)
+      const header = new Uint8Array(16);
+      header[0] = 0x5a;
+      header[1] = 0x01;
+      header[2] = 0x00;
+      header[3] = 0x01;
+      header[4] = 0x00;
+      header[5] = 0x00;
+      header[6] = 0x00;
+      header[7] = 0x00;
+      header[8] = 0x07;
+      header[9] = 0xd2;
+      header[10] = 0x00;
+      header[11] = 0x00;
+      header[12] = 0x00;
+      header[13] = 0x00;
+      header[14] = 0x00;
+      header[15] = 0x00;
+      console.log("Auto relocate message:", header);
+      window.electronAPI.sendTcpRequest(19205, header);
     }
   };
 
