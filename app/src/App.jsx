@@ -362,6 +362,7 @@ function App() {
             window.electronAPI.sendMapDataToMain(updatedData);
           }}
           onAddStation={handleAddStation} // 스테이션 추가 함수 전달
+          amrIP={amrIp}
         />
         <InfoPanel
           visible={!!clickedObject}

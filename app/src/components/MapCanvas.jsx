@@ -7,6 +7,7 @@ const MapCanvas = ({
   activeMenu,
   amrPosition,
   onAddStation,
+  amrIP,
 }) => {
   const canvasRef = useRef(null);
 
@@ -262,6 +263,7 @@ const MapCanvas = ({
       id: station.instanceName, // 예: "LM3"
       source_id: "SELF_POSITION", // 출발 지점은 현재 로봇 위치
     };
+    console.log(requestData);
 
     // 2) JSON → UTF-8 직렬화
     const jsonStr = JSON.stringify(requestData);
@@ -293,7 +295,7 @@ const MapCanvas = ({
 
     // 5) TCP 전송 (포트 19206)
     //    - 실제 구현은 Electron Main에서 socket.send(...) 하도록 래핑
-    window.electronAPI.sendTcpRequest(19206, message);
+    window.electronAPI.sendTcpRequest2(amrIP, 19206, message);
   };
 
   // 편집 모드에서 제어 핸들 드래그 처리
@@ -572,15 +574,15 @@ const MapCanvas = ({
       if (amrWidthStr && amrHeightStr) {
         const amrWidth_m = parseFloat(amrWidthStr) / 1000;
         const amrHeight_m = parseFloat(amrHeightStr) / 1000;
-        markerScreenWidth = amrWidth_m * scale;
-        markerScreenHeight = amrHeight_m * scale;
+        markerScreenWidth = amrHeight_m * scale;
+        markerScreenHeight = amrWidth_m * scale;
       } else {
         markerScreenWidth = 80 * (scale / 40);
         markerScreenHeight = 120 * (scale / 40);
       }
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(dir);
+      ctx.rotate(dir + Math.PI / 2);
       ctx.strokeStyle = "orange";
       ctx.lineWidth = 2;
       ctx.strokeRect(
@@ -711,8 +713,8 @@ const MapCanvas = ({
       const amrWidthStr = localStorage.getItem("amrWidth");
       const amrHeightStr = localStorage.getItem("amrHeight");
       if (amrImageData && amrWidthStr && amrHeightStr) {
-        const amrWidth_m = parseFloat(amrWidthStr) / 1000;
-        const amrHeight_m = parseFloat(amrHeightStr) / 1000;
+        const amrWidth_m = parseFloat(amrHeightStr) / 1000;
+        const amrHeight_m = parseFloat(amrWidthStr) / 1000;
         const screenWidth = amrWidth_m * scale;
         const screenHeight = amrHeight_m * scale;
         const posScreen = transformCoordinates(amrPosition.x, amrPosition.y);
@@ -720,7 +722,7 @@ const MapCanvas = ({
         amrImg.src = amrImageData;
         ctx.save();
         ctx.translate(posScreen.x, posScreen.y);
-        ctx.rotate(amrPosition.angle);
+        ctx.rotate(-1 * (amrPosition.angle + 1.5 * Math.PI));
         ctx.drawImage(
           amrImg,
           -screenWidth / 2,

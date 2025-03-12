@@ -35,8 +35,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         });
     },
     removeGetMapDataHandler: () => ipcRenderer.removeAllListeners('get-map-data'),
-    sendTcpRequest: (ipAddress, direction) =>
-        ipcRenderer.invoke('send-tcp-request', ipAddress, direction),
+    sendTcpRequest: (ipAddress, port, direction) =>
+        ipcRenderer.invoke('send-tcp-request', ipAddress, port, direction),
+    sendTcpRequest2: (ipAddress, port, message) =>
+        ipcRenderer.invoke('send-tcp-request-2', ipAddress, port, message),
     startSlam: (amrIp, slamType, realTime) => ipcRenderer.invoke('start-slam', amrIp, slamType, realTime),
     endSlam: (amrIp) => ipcRenderer.invoke('end-slam', amrIp),
     onSlamData: (callback) => ipcRenderer.on('slam-data', (event, data) => callback(data)),

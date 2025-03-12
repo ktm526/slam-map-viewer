@@ -15,6 +15,10 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
   const [relocateX, setRelocateX] = useState("");
   const [relocateY, setRelocateY] = useState("");
   const [relocateAngle, setRelocateAngle] = useState("");
+  let test_message = "";
+  function test(test_message) {
+    console.log(test_message);
+  }
 
   useEffect(() => {
     // 저장된 AMR IP 불러오기
@@ -115,7 +119,7 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
       message.set(data, header.length);
       console.log("Manual relocate message:", message);
       // TCP 요청 전송 (예: electronAPI에 sendTcpRequest 함수가 있다고 가정)
-      window.electronAPI.sendTcpRequest(19205, message);
+      window.electronAPI.sendTcpRequest2(amrIp, 19205, header);
     } else {
       // Auto 모드: 데이터 영역이 없음 (길이 0)
       const header = new Uint8Array(16);
@@ -136,7 +140,7 @@ const SettingsModal = ({ isOpen, onClose, onSave }) => {
       header[14] = 0x00;
       header[15] = 0x00;
       console.log("Auto relocate message:", header);
-      window.electronAPI.sendTcpRequest(19205, header);
+      window.electronAPI.sendTcpRequest2(amrIp, 19205, header);
     }
   };
 

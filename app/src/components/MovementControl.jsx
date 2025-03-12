@@ -45,7 +45,7 @@ const MovementControl = ({ amrIp }) => {
     requestInterval.current = setInterval(() => {
       console.log("Sending movement request:", direction);
       window.electronAPI
-        .sendTcpRequest(amrIp, direction)
+        .sendTcpRequest(amrIp, 19205, direction)
         .then((response) => {
           console.log("Response from AMR:", response);
         })

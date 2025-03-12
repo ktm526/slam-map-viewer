@@ -305,10 +305,10 @@ const getSaveFilePath = () => {
     });
 };
 
-ipcMain.handle('send-tcp-request', async (event, ipAddress, direction) => {
+ipcMain.handle('send-tcp-request', async (event, ipAddress, port, direction) => {
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
-        const PORT = 19205;
+        const PORT = port;
 
         console.log('Sending data to AMR:', {
             ipAddress,
@@ -319,7 +319,56 @@ ipcMain.handle('send-tcp-request', async (event, ipAddress, direction) => {
             const requestBuffer = createMovementRequest(direction);
             client.write(requestBuffer);
         });
+        // client.connect(PORT, amrIp, () => {
+        //     const requestBuffer = createMovementRequest(direction);
+        //     client.write(requestBuffer);
+        // });
 
+        let responseBuffer = Buffer.alloc(0);
+
+        client.on('data', (data) => {
+            responseBuffer = Buffer.concat([responseBuffer, data]);
+
+            if (responseBuffer.length >= 16) {
+                const header = parseHeader(responseBuffer.slice(0, 16));
+                const dataArea = responseBuffer.slice(16, 16 + header.dataLength);
+                try {
+                    const jsonData = JSON.parse(dataArea.toString());
+                    console.log('Response from AMR:', jsonData);
+                    resolve(jsonData);
+                    client.destroy();
+                } catch (err) {
+                    reject('Failed to parse AMR response');
+                    client.destroy();
+                }
+            }
+        });
+
+        client.on('error', (err) => {
+            console.error('Connection error:', err.message);
+            reject(`Connection error: ${err.message}`);
+            client.destroy();
+        });
+
+        client.on('close', () => {
+            console.log('TCP connection closed');
+        });
+    });
+});
+ipcMain.handle('send-tcp-request-2', async (event, ipAddress, port, message) => {
+    return new Promise((resolve, reject) => {
+        const client = new net.Socket();
+        const PORT = port;
+
+        console.log('Sending data to AMR:', {
+            ipAddress,
+            message,
+        });
+
+        client.connect(PORT, ipAddress, () => {
+            const requestBuffer = message;
+            client.write(requestBuffer);
+        });
         let responseBuffer = Buffer.alloc(0);
 
         client.on('data', (data) => {
@@ -619,7 +668,7 @@ function saveSettings(settings) {
     }
 }
 
-const API_NUMBER_FOR_UPLOAD = 0x0FAC;
+const API_NUMBER_FOR_UPLOAD = 0x07E9;
 
 function uploadMapToAMR(amrIp, mapData) {
     return new Promise((resolve, reject) => {
