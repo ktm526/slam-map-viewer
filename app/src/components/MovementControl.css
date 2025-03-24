@@ -148,7 +148,7 @@
   left: 210px;
   top: 10px;
   width: 1px;
-  height: 230px; /* 컨테이너 높이에 맞춤 */
+  height: 210px; /* 컨테이너 높이에 맞춤 */
   background-color: rgba(0, 0, 0, 0.2);
 }
 

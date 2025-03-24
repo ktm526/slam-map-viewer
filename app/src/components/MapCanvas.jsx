@@ -8,6 +8,8 @@ const MapCanvas = ({
   amrPosition,
   onAddStation,
   amrIP,
+  onAddPathFromContext, // App에서 전달받은 패스 추가 함수 (두 스테이션을 인자로 받음)
+  laserData,
 }) => {
   const canvasRef = useRef(null);
 
@@ -38,7 +40,13 @@ const MapCanvas = ({
   );
 
   // Canvas 크기 상태
-  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
+
+  // ── 신규: 패스 추가 모드 관련 상태 ──
+  const [isPathAdding, setIsPathAdding] = useState(false);
+  const [pathAddStart, setPathAddStart] = useState(null);
+  const [pathPreviewPos, setPathPreviewPos] = useState(null);
+
   useEffect(() => {
     console.log("MapCanvas Received Map Data:", mapData);
   }, [mapData]);
@@ -170,6 +178,43 @@ const MapCanvas = ({
   const handleCanvasClick = (e) => {
     e.preventDefault();
     const pos = getCanvasMousePos(e);
+    if (isPathAdding) {
+      const clicked = checkClickedObject(pos.x, pos.y);
+      if (clicked && clicked.type === "advancedPoint") {
+        const selectedStation = clicked.data;
+        // 시작 스테이션과 동일한 경우 알림
+        if (selectedStation.instanceName === pathAddStart.instanceName) {
+          alert("시작 스테이션과 동일합니다.");
+          return;
+        }
+        // 이미 패스가 존재하는지 확인
+        const pathExists = mapData.advancedCurveList.some((curve) => {
+          const startName = curve.startPos.instanceName;
+          const endName = curve.endPos.instanceName;
+          return (
+            (startName === pathAddStart.instanceName &&
+              endName === selectedStation.instanceName) ||
+            (startName === selectedStation.instanceName &&
+              endName === pathAddStart.instanceName)
+          );
+        });
+        if (pathExists) {
+          alert("이미 패스가 존재합니다.");
+        } else {
+          // App에서 전달받은 함수로 패스 추가
+          onAddPathFromContext(pathAddStart, selectedStation);
+        }
+        // 패스 추가 모드 종료 및 상태 초기화
+        setIsPathAdding(false);
+        setPathAddStart(null);
+        setPathPreviewPos(null);
+        canvasRef.current.style.cursor = "default";
+        return;
+      } else {
+        // 스테이션이 아닌 곳을 클릭한 경우 아무 동작 없이 미리보기 업데이트만 진행
+        return;
+      }
+    }
     const clicked = checkClickedObject(pos.x, pos.y);
     if (clicked) {
       setClickedObject(clicked);
@@ -192,66 +237,59 @@ const MapCanvas = ({
   const canvasCursorStyle = activeMenu === 3 ? "crosshair" : "default";
 
   // 우클릭 처리: 스테이션(advancedPoint)인 경우 "해당 위치로 이동" 메뉴를, 경로(advancedCurve)인 경우 "수정" 메뉴를 표시
+  // ── 컨텍스트 메뉴 핸들링 수정 ──
   const handleContextMenu = (e) => {
     e.preventDefault();
     const pos = getCanvasMousePos(e);
     const obj = checkClickedObject(pos.x, pos.y);
     if (obj) {
-      let refPoint = null;
+      const clientPos = getClientCoordinates({ x: pos.x, y: pos.y });
       if (obj.type === "advancedPoint") {
-        refPoint = transformCoordinates(obj.data.pos.x, obj.data.pos.y);
-      } else if (obj.type === "advancedCurve") {
-        const start = transformCoordinates(
-          obj.data.startPos.pos.x,
-          obj.data.startPos.pos.y
-        );
-        const c1 = transformCoordinates(
-          obj.data.controlPos1.x,
-          obj.data.controlPos1.y
-        );
-        const c2 = transformCoordinates(
-          obj.data.controlPos2.x,
-          obj.data.controlPos2.y
-        );
-        const end = transformCoordinates(
-          obj.data.endPos.pos.x,
-          obj.data.endPos.pos.y
-        );
-        const t = 0.5,
-          mt = 1 - t;
-        refPoint = {
-          x:
-            mt ** 3 * start.x +
-            3 * mt ** 2 * t * c1.x +
-            3 * mt * t ** 2 * c2.x +
-            t ** 3 * end.x,
-          y:
-            mt ** 3 * start.y +
-            3 * mt ** 2 * t * c1.y +
-            3 * mt * t ** 2 * c2.y +
-            t ** 3 * end.y,
-        };
-      }
-      const clientPos = getClientCoordinates(refPoint);
-      if (obj.type === "advancedPoint") {
+        // tooltip에 여러 옵션 추가: "이동"과 "패스 추가"
         setTooltip({
           x: clientPos.x + 2,
           y: clientPos.y + 2,
           object: obj,
-          action: () => handleMoveToStation(obj.data),
+          actions: [
+            {
+              label: "해당 위치로 이동",
+              action: () => {
+                handleMoveToStation(obj.data);
+              },
+            },
+            {
+              label: "패스 추가",
+              action: () => {
+                startPathAdd(obj.data);
+              },
+            },
+          ],
         });
       } else if (obj.type === "advancedCurve") {
         setTooltip({
           x: clientPos.x + 2,
           y: clientPos.y + 2,
           object: obj,
-          action: () => {
-            setEditingCurve(obj.data);
-            setTooltip(null);
-          },
+          actions: [
+            {
+              label: "수정",
+              action: () => {
+                setEditingCurve(obj.data);
+                setTooltip(null);
+              },
+            },
+          ],
         });
       }
     }
+  };
+  // ── 신규: 스테이션에서 패스 추가 모드 시작 함수 ──
+  const startPathAdd = (station) => {
+    setIsPathAdding(true);
+    setPathAddStart(station);
+    setTooltip(null);
+    // 커서 변경: plus 모양을 원한다면 커스텀 커서 이미지 사용 가능 (여기선 crosshair로 대체)
+    canvasRef.current.style.cursor = "crosshair";
   };
 
   // 스테이션 우클릭 시 "해당 위치로 이동" 액션 처리
@@ -328,6 +366,9 @@ const MapCanvas = ({
 
   const handleMouseMove = (e) => {
     const pos = getCanvasMousePos(e);
+    if (isPathAdding) {
+      setPathPreviewPos(pos);
+    }
     if (activeMenu === 3) {
       const mapCoord = inverseTransformCoordinates(pos.x, pos.y);
       setStationAddInfo({
@@ -438,7 +479,7 @@ const MapCanvas = ({
     const realMapY =
       ratioY * (maxPos.current.y - minPos.current.y) + minPos.current.y;
     let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
-    newScale = Math.max(0.05, Math.min(newScale, 100));
+    newScale = Math.max(0.05, Math.min(newScale, 200));
     setScale(newScale);
     const newRatioX =
       (realMapX - minPos.current.x) / (maxPos.current.x - minPos.current.x);
@@ -563,14 +604,17 @@ const MapCanvas = ({
       }
     });
 
-    // Station(advancedPointList) 마커 그리기
+    // Station(advancedPointList) 마커 그리기 및 이름, 방향 아이콘 표시
     (mapData.advancedPointList || []).forEach((station) => {
+      // 스테이션 위치 (transformCoordinates 사용)
       const { x, y } = transformCoordinates(station.pos.x, station.pos.y);
       const dir = station.dir;
-      const amrWidthStr = localStorage.getItem("amrWidth");
-      const amrHeightStr = localStorage.getItem("amrHeight");
+
+      // 마커 크기 계산 (localStorage 값에 따라 조정)
       let markerScreenWidth = 80,
         markerScreenHeight = 120;
+      const amrWidthStr = localStorage.getItem("amrWidth");
+      const amrHeightStr = localStorage.getItem("amrHeight");
       if (amrWidthStr && amrHeightStr) {
         const amrWidth_m = parseFloat(amrWidthStr) / 1000;
         const amrHeight_m = parseFloat(amrHeightStr) / 1000;
@@ -580,9 +624,11 @@ const MapCanvas = ({
         markerScreenWidth = 80 * (scale / 40);
         markerScreenHeight = 120 * (scale / 40);
       }
+
+      // 1. 스테이션 사각형 테두리 그리기
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(dir + Math.PI / 2);
+      ctx.rotate(-dir - Math.PI / 2);
       ctx.strokeStyle = "orange";
       ctx.lineWidth = 2;
       ctx.strokeRect(
@@ -591,49 +637,78 @@ const MapCanvas = ({
         markerScreenWidth,
         markerScreenHeight
       );
-      ctx.fillStyle = "orange";
+      ctx.restore();
+
+      // 2. 스테이션 방향 아이콘(정삼각형) 그리기
+      ctx.save();
+      const centerRadius = 2 * (scale / 40);
+      const margin = 5 * (scale / 40);
+      const circleDistance = centerRadius + margin; // station 중심에서 원까지의 오프셋
+      ctx.translate(
+        x + circleDistance * Math.cos(station.dir),
+        y - circleDistance * Math.sin(station.dir)
+      );
+      // 작은 원 그리기: markerScreenWidth의 1/12 크기로 설정 (원하는 크기로 조정 가능)
+      const circleRadius = markerScreenWidth / 24;
       ctx.beginPath();
-      const arrowTipY = -markerScreenHeight / 2;
-      const arrowHeight = 10 * (scale / 40);
-      const arrowWidth = markerScreenWidth / 4;
-      ctx.moveTo(0, arrowTipY);
-      ctx.lineTo(-arrowWidth / 2, arrowTipY + arrowHeight);
-      ctx.lineTo(arrowWidth / 2, arrowTipY + arrowHeight);
-      ctx.closePath();
+      ctx.arc(0, 0, circleRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = "orange";
       ctx.fill();
       ctx.restore();
 
+      // 3. 스테이션 중앙 원 그리기
       ctx.fillStyle = "orange";
       ctx.beginPath();
-      const centerRadius = 6 * (scale / 40);
       ctx.arc(x, y, centerRadius, 0, 2 * Math.PI);
       ctx.fill();
 
+      // 4. 스테이션 이름을 중앙 원 바로 아래에 표시
       ctx.fillStyle = "black";
-      ctx.font = `${10 * (scale / 40)}px Arial`;
+      ctx.font = `${4 * (scale / 40)}px Arial`;
       ctx.textAlign = "center";
-      ctx.fillText(
-        station.instanceName,
-        x,
-        y + markerScreenHeight / 2 + 20 * (scale / 40)
-      );
+      ctx.fillText(station.instanceName, x, y + centerRadius + 16);
     });
 
     // 원점 (0,0) 표시
+    // 원점 (0,0) 및 x, y 축 표시
     const originScreen = transformCoordinates(0, 0);
     ctx.save();
     ctx.strokeStyle = "green";
     ctx.lineWidth = 2;
+
+    // X축: 원점에서 오른쪽 50픽셀까지 선 그리기
     ctx.beginPath();
-    ctx.moveTo(originScreen.x - 5, originScreen.y);
-    ctx.lineTo(originScreen.x + 5, originScreen.y);
-    ctx.moveTo(originScreen.x, originScreen.y - 5);
-    ctx.lineTo(originScreen.x, originScreen.y + 5);
+    ctx.moveTo(originScreen.x, originScreen.y);
+    ctx.lineTo(originScreen.x + 50, originScreen.y);
     ctx.stroke();
-    ctx.font = "16px Arial";
+
+    // X축 화살표 머리
+    ctx.beginPath();
+    ctx.moveTo(originScreen.x + 50, originScreen.y);
+    ctx.lineTo(originScreen.x + 45, originScreen.y - 5);
+    ctx.lineTo(originScreen.x + 45, originScreen.y + 5);
+    ctx.closePath();
     ctx.fillStyle = "green";
-    ctx.textAlign = "left";
-    ctx.fillText("(0, 0)", originScreen.x + 8, originScreen.y - 8);
+    ctx.fill();
+
+    // Y축: 원점에서 위쪽 50픽셀까지 선 그리기
+    ctx.beginPath();
+    ctx.moveTo(originScreen.x, originScreen.y);
+    ctx.lineTo(originScreen.x, originScreen.y - 50);
+    ctx.stroke();
+
+    // Y축 화살표 머리
+    ctx.beginPath();
+    ctx.moveTo(originScreen.x, originScreen.y - 50);
+    ctx.lineTo(originScreen.x - 5, originScreen.y - 45);
+    ctx.lineTo(originScreen.x + 5, originScreen.y - 45);
+    ctx.closePath();
+    ctx.fill();
+
+    // 축 레이블
+    ctx.font = "14px Arial";
+    ctx.fillText("X", originScreen.x + 55, originScreen.y);
+    ctx.fillText("Y", originScreen.x, originScreen.y - 55);
     ctx.restore();
 
     // Hover 및 클릭된 오브젝트 하이라이트
@@ -660,7 +735,7 @@ const MapCanvas = ({
         }
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(dir);
+        ctx.rotate(-dir);
         ctx.shadowColor = "rgba(255, 165, 0, 0.8)";
         ctx.shadowBlur = 25;
         ctx.strokeStyle = "orange";
@@ -707,7 +782,7 @@ const MapCanvas = ({
     highlightObject(clickedObject);
 
     // AMR 위치 (이미지) 그리기
-    if (amrPosition) {
+    if (amrPosition && activeMenu === 0) {
       console.log(amrPosition);
       const amrImageData = localStorage.getItem("amrImage");
       const amrWidthStr = localStorage.getItem("amrWidth");
@@ -733,6 +808,55 @@ const MapCanvas = ({
         ctx.restore();
       }
     }
+    // 패스 추가 모드 시, 미리보기 선 그리기
+    if (isPathAdding && pathAddStart && pathPreviewPos) {
+      const startScreen = transformCoordinates(
+        pathAddStart.pos.x,
+        pathAddStart.pos.y
+      );
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(startScreen.x, startScreen.y);
+      ctx.lineTo(pathPreviewPos.x, pathPreviewPos.y);
+      ctx.strokeStyle = "rgba(0, 0, 255, 0.5)"; // 연한 파란색
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // 점선 효과
+      ctx.stroke();
+      ctx.restore();
+    }
+    // 레이저 데이터 그리기 (laserData가 있으면)
+    if (laserData && laserData.lasers && amrPosition && activeMenu === 0) {
+      console.log("canvas laser");
+      console.log(laserData);
+      // AMR 위치를 기준으로 상대 좌표로 변환합니다.
+      const amrScreen = transformCoordinates(amrPosition.x, amrPosition.y);
+      // 예를 들어, FrontLiDAR 데이터의 beams 그리기
+      const frontLaser = laserData.lasers[0];
+      if (frontLaser && frontLaser.beams) {
+        frontLaser.beams.forEach((beam) => {
+          if (beam.valid) {
+            // 각 beam의 angle과 dist를 사용하여 좌표 계산 (각도는 degree 단위)
+            const angleRad = beam.angle * (Math.PI / 180);
+            const beamX = amrScreen.x + beam.dist * scale * Math.cos(angleRad);
+            const beamY = amrScreen.y - beam.dist * scale * Math.sin(angleRad);
+
+            // 로봇 중심과 beam 사이에 연하고 반투명한 선 그리기
+            ctx.beginPath();
+            ctx.moveTo(amrScreen.x, amrScreen.y);
+            ctx.lineTo(beamX, beamY);
+            ctx.strokeStyle = "rgba(0, 255, 255, 0.3)"; // 반투명 cyan
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // beam 점 그리기 (작은 원)
+            ctx.beginPath();
+            ctx.arc(beamX, beamY, 2, 0, 2 * Math.PI); // 반지름 6 (필요시 조절)
+            ctx.fillStyle = "rgba(0, 255, 255, 0.8)"; // neon cyan
+            ctx.fill();
+          }
+        });
+      }
+    }
   }, [
     mapData,
     scale,
@@ -742,6 +866,10 @@ const MapCanvas = ({
     clickedObject,
     amrPosition,
     editingCurve,
+    isPathAdding, // 추가
+    pathAddStart, // 추가
+    pathPreviewPos, // 추가
+    laserData,
   ]);
 
   return (
@@ -762,6 +890,7 @@ const MapCanvas = ({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
+      {/* tooltip 렌더링 */}
       {tooltip && (
         <div
           style={{
@@ -769,31 +898,24 @@ const MapCanvas = ({
             left: tooltip.x,
             top: tooltip.y,
             background: "white",
-            color: "#333",
             padding: "8px",
             borderRadius: "8px",
             boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
             zIndex: 1000,
-            fontFamily:
-              "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-            fontSize: "14px",
           }}
-          onClick={() => setTooltip(null)}
         >
-          <div
-            style={{ cursor: "pointer", padding: "4px 8px" }}
-            onClick={() => {
-              if (tooltip.action) {
-                tooltip.action();
-              } else {
-                setTooltip(null);
-              }
-            }}
-          >
-            {tooltip.object.type === "advancedPoint"
-              ? "해당 위치로 이동"
-              : "수정"}
-          </div>
+          {tooltip.actions &&
+            tooltip.actions.map((item, idx) => (
+              <div
+                key={idx}
+                style={{ cursor: "pointer", padding: "4px 8px" }}
+                onClick={() => {
+                  item.action();
+                }}
+              >
+                {item.label}
+              </div>
+            ))}
         </div>
       )}
       {stationAddInfo && activeMenu === 3 && (

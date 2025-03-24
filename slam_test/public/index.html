@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>2D 실시간 스캔 테스트</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>2D 실시간 스캔</h1>
+
+      <div class="form-group">
+        <label for="ipInput">로봇 IP 주소:</label>
+        <input type="text" id="ipInput" placeholder="예: 192.168.0.10" />
+      </div>
+
+      <div class="button-group">
+        <button id="startBtn">스캔 시작</button>
+        <button id="stopBtn" class="danger">스캔 종료</button>
+      </div>
+
+      <div class="canvas-container">
+        <!-- width, height 속성 제거 (CSS와 JS로 크기 제어) -->
+        <canvas id="slamCanvas"></canvas>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

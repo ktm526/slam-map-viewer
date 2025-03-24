@@ -18,7 +18,7 @@ let storedAmrIp = null; // 메모리에 저장된 AMR IP
 let tcpClient = null;   // AMR 데이터 구독에 사용될 TCP 클라이언트
 
 ipcMain.on('map-data-to-main', (event, mapData) => {
-    console.log('Received mapData from renderer:', mapData);
+    //console.log('Received mapData from renderer:', mapData);
     currentMapData = mapData; // 메인 프로세스에 데이터 저장
 });
 
@@ -74,7 +74,7 @@ function createWindow() {
                             const jsonData = JSON.parse(fileContent);
                             win.webContents.send('file-opened', jsonData);
                         } catch (error) {
-                            console.error("Error opening file:", error);
+                            //console.error("Error opening file:", error);
                             dialog.showErrorBox('파일 열기 오류', '파일을 여는 중 오류가 발생했습니다.');
                         }
                     }
@@ -109,7 +109,7 @@ function createWindow() {
                                 message: '맵 데이터가 성공적으로 저장되었습니다.',
                             });
                         } catch (error) {
-                            console.error('Error saving map data:', error);
+                            //console.error('Error saving map data:', error);
                             dialog.showErrorBox('Error', 'Failed to save map data.');
                         }
                     }
@@ -153,19 +153,19 @@ function createWindow() {
 
                             const selectedMapIndex = response.response;
                             if (selectedMapIndex === buttons.length - 1) {
-                                console.log('맵 선택이 취소되었습니다.');
+                                //console.log('맵 선택이 취소되었습니다.');
                                 return;
                             }
 
                             const selectedMap = mapNames[selectedMapIndex];
-                            console.log('Selected Map:', selectedMap);
+                            //console.log('Selected Map:', selectedMap);
 
                             // storedAmrIp를 사용하도록 수정
                             const downloadedMap = await downloadMapFromAMR(storedAmrIp, selectedMap);
 
                             const mainWindow = BrowserWindow.getFocusedWindow();
                             if (mainWindow) {
-                                console.log('Sending map data to renderer:', downloadedMap);
+                                //console.log('Sending map data to renderer:', downloadedMap);
                                 mainWindow.webContents.send('map-data-updated', downloadedMap);
                             }
 
@@ -175,7 +175,7 @@ function createWindow() {
                                 message: `맵 "${selectedMap}"이(가) 성공적으로 다운로드되었습니다.`,
                             });
                         } catch (error) {
-                            console.error('Failed to download map:', error);
+                            //console.error('Failed to download map:', error);
                             dialog.showErrorBox('오류', `맵 다운로드 중 오류가 발생했습니다: ${error.message}`);
                         }
                     },
@@ -183,7 +183,7 @@ function createWindow() {
                 {
                     label: 'AMR에 파일 업로드',
                     click: async () => {
-                        console.log("AMR에 파일 업로드 선택됨");
+                        //console.log("AMR에 파일 업로드 선택됨");
 
                         if (!storedAmrIp) {
                             dialog.showErrorBox('오류', 'AMR IP가 설정되지 않았습니다.');
@@ -197,7 +197,7 @@ function createWindow() {
 
                         try {
                             const result = await uploadMapToAMR(storedAmrIp, currentMapData);
-                            console.log("Upload result:", result);
+                            //console.log("Upload result:", result);
 
                             dialog.showMessageBox({
                                 type: 'info',
@@ -205,7 +205,7 @@ function createWindow() {
                                 message: '맵 데이터가 성공적으로 업로드되었습니다.',
                             });
                         } catch (error) {
-                            console.error("Upload error:", error);
+                            //console.error("Upload error:", error);
                             dialog.showErrorBox('오류', `업로드 중 오류가 발생했습니다: ${error.message}`);
                         }
                     }
@@ -235,7 +235,7 @@ app.whenReady().then(() => {
     const settings = loadSettings();
     if (settings.amrIp) {
         storedAmrIp = settings.amrIp;
-        console.log("Loaded stored AMR IP:", storedAmrIp);
+        //console.log("Loaded stored AMR IP:", storedAmrIp);
     }
     createWindow();
 
@@ -279,7 +279,7 @@ ipcMain.handle('save-map-data', async (event, mapData) => {
         fs.writeFileSync(filePath, JSON.stringify(mapData), 'utf-8');
         return { success: true, message: '맵이 성공적으로 저장되었습니다.' };
     } catch (error) {
-        console.error("Error saving map data:", error);
+        //console.error("Error saving map data:", error);
         return { success: false, message: '맵 저장 중 오류가 발생했습니다.' };
     }
 });
@@ -310,10 +310,10 @@ ipcMain.handle('send-tcp-request', async (event, ipAddress, port, direction) => 
         const client = new net.Socket();
         const PORT = port;
 
-        console.log('Sending data to AMR:', {
-            ipAddress,
-            direction,
-        });
+        //console.log('Sending data to AMR:', {
+        // ipAddress,
+        //     direction,
+        // });
 
         client.connect(PORT, ipAddress, () => {
             const requestBuffer = createMovementRequest(direction);
@@ -334,7 +334,7 @@ ipcMain.handle('send-tcp-request', async (event, ipAddress, port, direction) => 
                 const dataArea = responseBuffer.slice(16, 16 + header.dataLength);
                 try {
                     const jsonData = JSON.parse(dataArea.toString());
-                    console.log('Response from AMR:', jsonData);
+                    //console.log('Response from AMR:', jsonData);
                     resolve(jsonData);
                     client.destroy();
                 } catch (err) {
@@ -345,13 +345,13 @@ ipcMain.handle('send-tcp-request', async (event, ipAddress, port, direction) => 
         });
 
         client.on('error', (err) => {
-            console.error('Connection error:', err.message);
+            //console.error('Connection error:', err.message);
             reject(`Connection error: ${err.message}`);
             client.destroy();
         });
 
         client.on('close', () => {
-            console.log('TCP connection closed');
+            //console.log('TCP connection closed');
         });
     });
 });
@@ -360,10 +360,10 @@ ipcMain.handle('send-tcp-request-2', async (event, ipAddress, port, message) => 
         const client = new net.Socket();
         const PORT = port;
 
-        console.log('Sending data to AMR:', {
-            ipAddress,
-            message,
-        });
+        //console.log('Sending data to AMR:', {
+        // ipAddress,
+        //     message,
+        // });
 
         client.connect(PORT, ipAddress, () => {
             const requestBuffer = message;
@@ -373,30 +373,34 @@ ipcMain.handle('send-tcp-request-2', async (event, ipAddress, port, message) => 
 
         client.on('data', (data) => {
             responseBuffer = Buffer.concat([responseBuffer, data]);
-
             if (responseBuffer.length >= 16) {
-                const header = parseHeader(responseBuffer.slice(0, 16));
-                const dataArea = responseBuffer.slice(16, 16 + header.dataLength);
-                try {
-                    const jsonData = JSON.parse(dataArea.toString());
-                    console.log('Response from AMR:', jsonData);
-                    resolve(jsonData);
-                    client.destroy();
-                } catch (err) {
-                    reject('Failed to parse AMR response');
-                    client.destroy();
+                const header = responseBuffer.slice(0, 16);
+                const dataLength = header.readUInt32BE(4);
+                // 전체 응답 패킷(헤더+바디)을 모두 수신했는지 확인
+                if (responseBuffer.length >= 16 + dataLength) {
+                    const dataArea = responseBuffer.slice(16, 16 + dataLength);
+                    try {
+                        const jsonData = JSON.parse(dataArea.toString());
+                        console.log('Response from AMR:', jsonData);
+                        resolve(jsonData);
+                        client.destroy();
+                    } catch (err) {
+                        reject('Failed to parse AMR response');
+                        client.destroy();
+                    }
                 }
             }
         });
 
+
         client.on('error', (err) => {
-            console.error('Connection error:', err.message);
+            //console.error('Connection error:', err.message);
             reject(`Connection error: ${err.message}`);
             client.destroy();
         });
 
         client.on('close', () => {
-            console.log('TCP connection closed');
+            //console.log('TCP connection closed');
         });
     });
 });
@@ -478,7 +482,7 @@ function fetchMapListFromAMR(amrIp) {
 
                     try {
                         const jsonData = JSON.parse(dataArea.toString());
-                        console.log('Map List Response:', jsonData);
+                        //console.log('Map List Response:', jsonData);
                         resolve(jsonData);
                         client.destroy();
                     } catch (error) {
@@ -495,7 +499,7 @@ function fetchMapListFromAMR(amrIp) {
         });
 
         client.on('close', () => {
-            console.log('Connection closed');
+            //console.log('Connection closed');
         });
     });
 }
@@ -534,7 +538,7 @@ function downloadMapFromAMR(amrIp, mapName) {
 
                     try {
                         const jsonData = JSON.parse(dataArea.toString());
-                        console.log('Downloaded Map Data:', jsonData);
+                        //console.log('Downloaded Map Data:', jsonData);
 
                         if (jsonData.ret_code && jsonData.ret_code !== 0) {
                             reject(new Error(jsonData.err_msg || 'Unknown error'));
@@ -556,7 +560,7 @@ function downloadMapFromAMR(amrIp, mapName) {
         });
 
         client.on('close', () => {
-            console.log('Map download connection closed');
+            //console.log('Map download connection closed');
         });
     });
 }
@@ -634,7 +638,7 @@ ipcMain.handle('show-map-list', async (event, mapNames) => {
 });
 
 ipcMain.handle('set-amr-ip', async (event, amrIp) => {
-    console.log("Setting AMR IP:", amrIp);
+    //console.log("Setting AMR IP:", amrIp);
     storedAmrIp = amrIp;
 
     let currentSettings = loadSettings();
@@ -655,7 +659,7 @@ function loadSettings() {
             return JSON.parse(raw);
         }
     } catch (error) {
-        console.error("Error loading settings:", error);
+        //console.error("Error loading settings:", error);
     }
     return {};
 }
@@ -664,7 +668,7 @@ function saveSettings(settings) {
     try {
         fs.writeFileSync(settingsFilePath, JSON.stringify(settings, null, 2), 'utf-8');
     } catch (error) {
-        console.error("Error saving settings:", error);
+        //console.error("Error saving settings:", error);
     }
 }
 
@@ -703,7 +707,7 @@ function uploadMapToAMR(amrIp, mapData) {
                     const dataArea = responseBuffer.slice(16, 16 + dataLen);
                     try {
                         const jsonData = JSON.parse(dataArea.toString());
-                        console.log("Upload response:", jsonData);
+                        //console.log("Upload response:", jsonData);
 
                         if (jsonData.ret_code && jsonData.ret_code !== 0) {
                             reject(new Error(jsonData.err_msg || 'Unknown error'));
@@ -724,7 +728,7 @@ function uploadMapToAMR(amrIp, mapData) {
         });
 
         client.on('close', () => {
-            console.log('Upload connection closed');
+            //console.log('Upload connection closed');
         });
     });
 }
@@ -735,17 +739,17 @@ ipcMain.handle('subscribe-to-push-data', (event, amrIp, port) => {
         tcpClient = new net.Socket();
 
         tcpClient.connect(port, amrIp, () => {
-            console.log(`Connected to AMR at ${amrIp}:${port}`);
+            //console.log(`Connected to AMR at ${amrIp}:${port}`);
             resolve(true);
         });
 
         tcpClient.on('data', (data) => {
-            console.log('Received data:', data);
+            //console.log('Received data:', data);
             responseBuffer = Buffer.concat([responseBuffer, data]);
 
             while (responseBuffer.length >= 16) {
                 const header = parseHeader(responseBuffer.slice(0, 16));
-                console.log('Parsed header:', header);
+                //console.log('Parsed header:', header);
                 const expectedLength = 16 + header.dataLength;
 
                 if (responseBuffer.length >= expectedLength) {
@@ -753,33 +757,33 @@ ipcMain.handle('subscribe-to-push-data', (event, amrIp, port) => {
                     responseBuffer = responseBuffer.slice(expectedLength);
 
                     const dataArea = packet.slice(16);
-                    console.log('Data area:', dataArea);
+                    //console.log('Data area:', dataArea);
                     try {
                         const jsonData = JSON.parse(dataArea.toString());
-                        console.log('Decoded push data:', jsonData);
+                        //console.log('Decoded push data:', jsonData);
 
                         event.sender.send('push-data', jsonData);
                     } catch (error) {
-                        console.error(`Failed to parse JSON data: ${error.message}`);
+                        //console.error(`Failed to parse JSON data: ${error.message}`);
                     }
                 } else {
-                    console.log('Not yet full packet');
+                    //console.log('Not yet full packet');
                     break;
                 }
             }
         });
 
         tcpClient.on('error', (err) => {
-            console.error('TCP connection error:', err.message);
+            //console.error('TCP connection error:', err.message);
             reject(err);
         });
 
         tcpClient.on('close', () => {
-            console.log('TCP connection closed');
+            //console.log('TCP connection closed');
         });
 
         tcpClient.on('timeout', () => {
-            console.error('TCP request timed out');
+            //console.error('TCP request timed out');
             reject(new Error('TCP request timed out'));
             tcpClient.destroy();
         });
@@ -790,6 +794,6 @@ ipcMain.handle('unsubscribe-from-push-data', () => {
     if (tcpClient) {
         tcpClient.destroy();
         tcpClient = null;
-        console.log('Disconnected from AMR');
+        //console.log('Disconnected from AMR');
     }
 });

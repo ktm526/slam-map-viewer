@@ -28,11 +28,12 @@ function App() {
     advancedCurveList: [],
   });
   const [clickedObject, setClickedObject] = useState(null);
+  const [laserData, setLaserData] = useState(null);
 
   // 로봇 데이터 업데이트
   useEffect(() => {
     window.electronAPI.onRobotDataUpdate((data) => {
-      console.log("Updating robot data in App:", data);
+      //console.log("Updating robot data in App:", data);
       setRobotData(data);
     });
   }, []);
@@ -40,7 +41,7 @@ function App() {
   // SLAM 데이터 업데이트
   useEffect(() => {
     window.electronAPI.on("slam-data", (data) => {
-      console.log("Received SLAM data:", data);
+      //console.log("Received SLAM data:", data);
       setMapData((prevData) => ({
         ...prevData,
         normalPosList: data.points || [],
@@ -54,7 +55,7 @@ function App() {
   // AMR 데이터(PushData) 업데이트
   useEffect(() => {
     const handlePushData = (data) => {
-      console.log("Received AMR data:", data);
+      //console.log("Received AMR data:", data);
       setAmrPosition({ x: data.x, y: data.y, angle: data.angle });
     };
     window.electronAPI.onPushData(handlePushData);
@@ -67,18 +68,18 @@ function App() {
   const startPushData = async () => {
     try {
       await window.electronAPI.subscribeToPushData(amrIp, 19301);
-      console.log("Subscribed to push data");
+      //console.log("Subscribed to push data");
     } catch (error) {
-      console.error("Error subscribing to push data:", error);
+      //console.error("Error subscribing to push data:", error);
     }
   };
 
   const stopPushData = async () => {
     try {
       await window.electronAPI.unsubscribeFromPushData();
-      console.log("Unsubscribed from push data");
+      //console.log("Unsubscribed from push data");
     } catch (error) {
-      console.error("Error unsubscribing from push data:", error);
+      //console.error("Error unsubscribing from push data:", error);
     }
   };
 
@@ -92,7 +93,7 @@ function App() {
 
   const handleSaveAmrIp = (newIp) => {
     setAmrIp(newIp);
-    console.log("Saved AMR IP:", newIp);
+    //console.log("Saved AMR IP:", newIp);
     // 필요시 메인 프로세스로 전달하는 로직 추가
   };
 
@@ -149,7 +150,7 @@ function App() {
 
   // 객체 업데이트 및 삭제 함수
   const handleObjectUpdate = (updatedObject) => {
-    console.log("Updating object:", updatedObject);
+    //console.log("Updating object:", updatedObject);
     setMapData((prevData) => {
       if (updatedObject.type === "advancedPoint") {
         return {
@@ -175,7 +176,7 @@ function App() {
   };
 
   const handleObjectDelete = (object) => {
-    console.log("Deleting object:", object);
+    //console.log("Deleting object:", object);
     if (object.type === "advancedPoint") {
       const stationName = object.data.instanceName;
       setMapData((prevData) => ({
@@ -246,12 +247,12 @@ function App() {
 
   // 메뉴 클릭 핸들러
   const handleMenuClick = (menuIndex) => {
-    console.log(`Menu clicked: ${menuIndex}`);
+    //console.log(`Menu clicked: ${menuIndex}`);
     if (menuIndex === 3) {
       // 스테이션 추가 모드: 모달 대신 activeMenu를 3으로 설정하여 MapCanvas에서 처리
       setActiveMenu(activeMenu === 3 ? null : 3);
     } else if (menuIndex === 2) {
-      console.log("Opening Path Modal");
+      //console.log("Opening Path Modal");
       setIsPathModalOpen(true);
     } else if (menuIndex === 4) {
       setIsSettingsModalOpen(true);
@@ -262,7 +263,7 @@ function App() {
 
   // PathModal, SettingsModal 닫기 함수
   const closePathModal = () => {
-    console.log("Closing Path Modal");
+    //console.log("Closing Path Modal");
     setIsPathModalOpen(false);
     setActiveMenu(null);
   };
@@ -286,19 +287,19 @@ function App() {
   // 메인 프로세스에 mapData 제공
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.handleGetMapData) {
-      console.log("Registering get-map-data handler");
+      //console.log("Registering get-map-data handler");
       window.electronAPI.handleGetMapData(() => mapData);
     } else {
-      console.warn("electronAPI.handleGetMapData is not available");
+      //console.warn("electronAPI.handleGetMapData is not available");
     }
   }, [mapData]);
 
   // 외부에서 mapData 업데이트 수신
   useEffect(() => {
     const handleMapDataUpdated = (newMapData) => {
-      console.log("Received newMapData in App.js:", newMapData);
+      //console.log("Received newMapData in App.js:", newMapData);
       if (!newMapData) {
-        console.error("newMapData is undefined in App.js");
+        //console.error("newMapData is undefined in App.js");
         return;
       }
       setMapData(newMapData);
@@ -315,14 +316,14 @@ function App() {
   // SLAM 데이터 추가 수신 (points 배열 병합)
   useEffect(() => {
     const handleSlamData = (data) => {
-      console.log("Received SLAM data:", data);
+      //console.log("Received SLAM data:", data);
       if (data && Array.isArray(data.points)) {
         setMapData((prevData) => ({
           ...prevData,
           normalPosList: [...prevData.normalPosList, ...data.points],
         }));
       } else {
-        console.error("Invalid SLAM data format:", data);
+        //console.error("Invalid SLAM data format:", data);
       }
     };
     window.electronAPI.onSlamData(handleSlamData);
@@ -334,12 +335,55 @@ function App() {
   // mapData 변경 시 메인 프로세스에 전송
   useEffect(() => {
     window.mapData = mapData;
-    console.log("window.mapData updated:", window.mapData);
+    //console.log("window.mapData updated:", window.mapData);
     if (typeof window !== "undefined" && window.electronAPI) {
-      console.log("Sending mapData to main process:", mapData);
+      //console.log("Sending mapData to main process:", mapData);
       window.electronAPI.sendMapDataToMain(mapData);
     }
   }, [mapData]);
+
+  useEffect(() => {
+    //console.log("laserdatacall");
+    let laserInterval;
+    if (activeMenu === 0 && amrIp) {
+      laserInterval = setInterval(async () => {
+        try {
+          // 요청할 객체 (예시로 return_beams3D 필드 포함)
+          const requestObj = { return_beams3D: true };
+          const jsonStr = JSON.stringify(requestObj);
+          const encoder = new TextEncoder();
+          const body = encoder.encode(jsonStr);
+
+          // DataView를 이용해 16바이트 헤더 생성 (Big Endian)
+          const header = new Uint8Array(16);
+          const view = new DataView(header.buffer);
+          view.setUint16(0, 0x55aa, false); // 매직 넘버 0x55AA
+          view.setUint16(2, 0x03f1, false); // API 번호 0x03F1 (1009)
+          view.setUint32(4, body.length, false); // 데이터 길이
+          view.setUint32(8, 0, false); // 시퀀스 번호 (0)
+          view.setUint32(12, 0, false); // 예약 (0)
+
+          const packet = new Uint8Array(header.length + body.length);
+          packet.set(header, 0);
+          packet.set(body, header.length);
+
+          // main 프로세스의 sendTcpRequest2를 사용하여 포트 19204로 요청 전송
+          const response = await window.electronAPI.sendTcpRequest2(
+            amrIp,
+            19204,
+            packet
+          );
+          //console.log("Laser data response:", response);
+          setLaserData(response);
+        } catch (error) {
+          //console.error("Error fetching laser data:", error);
+        }
+      }, 100); // 100ms 간격 – 필요에 따라 조절
+    }
+    return () => {
+      if (laserInterval) clearInterval(laserInterval);
+    };
+  }, [activeMenu, amrIp]);
 
   return (
     <div>
@@ -363,6 +407,8 @@ function App() {
           }}
           onAddStation={handleAddStation} // 스테이션 추가 함수 전달
           amrIP={amrIp}
+          onAddPathFromContext={handleAddPath} //
+          laserData={laserData}
         />
         <InfoPanel
           visible={!!clickedObject}
